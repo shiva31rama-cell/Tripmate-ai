@@ -115,3 +115,21 @@ The visual prototype is the first working foundation. The next implementation st
 8. AI planner that consumes validated structured data
 9. Automated data freshness/validation tests
 10. Deployment and production environment configuration
+
+
+## Implemented next-stage foundation
+
+The current main branch now also includes:
+
+- Guest trip persistence with browser-local storage
+- Open / remove saved guest trips
+- Explore search and category filters
+- Rental vehicle filters
+- Explicit demo status badges across prototype data
+- Provider-result helpers with LIVE, DEMO, and UNAVAILABLE boundaries
+- Provider-result unit tests
+- Expanded Supabase RLS policies and indexes for user-owned trip data
+
+### Integration rule
+
+The UI is intentionally usable without API keys. Live booking, live fares, real availability, geocoding and AI generation are not fabricated. They should be added behind provider services once credentials and production services are configured.
