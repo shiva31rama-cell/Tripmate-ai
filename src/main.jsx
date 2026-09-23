@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import "./styles.css";
+import { calculateDemoBudget, validateTripInput } from "./services/validation";
 
 const temples = [
   {
@@ -57,13 +58,11 @@ function App() {
   const [days, setDays] = useState(3);
   const [plan, setPlan] = useState(null);
 
-  const estimatedBudget = useMemo(() => {
-    const transport = travellers * 900;
-    const stay = days * 1800;
-    const food = travellers * days * 450;
-    const local = days * 650;
-    return transport + stay + food + local;
-  }, [travellers, days]);
+  const demoBudget = useMemo(
+    () => calculateDemoBudget({ travellers, days }),
+    [travellers, days]
+  );
+  const estimatedBudget = demoBudget.total;
 
   function createPlan() {
     const cleanFrom = from.trim();
