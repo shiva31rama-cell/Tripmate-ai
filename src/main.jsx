@@ -68,9 +68,17 @@ function App() {
   function createPlan() {
     const cleanFrom = from.trim();
     const cleanTo = to.trim();
-    if (!cleanFrom || !cleanTo) return;
+    if (!cleanFrom || !cleanTo) {
+      setPlan({ invalid: true, message: "Please enter both a source and a destination." });
+      setActiveTab("plan");
+      return;
+    }
     if (cleanFrom.toLowerCase() === cleanTo.toLowerCase()) {
-      setPlan({ invalid: true, message: "Source and destination are the same. Please choose a different destination." });
+      setPlan({
+        invalid: true,
+        message: "Source and destination are the same. Choose another destination or explore this city locally.",
+      });
+      setActiveTab("plan");
       return;
     }
     setPlan({
