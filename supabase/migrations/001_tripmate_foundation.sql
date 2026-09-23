@@ -113,3 +113,16 @@ alter table public.trip_days enable row level security;
 alter table public.trip_items enable row level security;
 alter table public.saved_places enable row level security;
 alter table public.budget_items enable row level security;
+
+
+-- Public source catalog: readable by clients, not user-owned.
+alter table public.data_sources enable row level security;
+drop policy if exists "data_sources_read" on public.data_sources;
+create policy "data_sources_read" on public.data_sources
+for select using (true);
+
+-- Keep source metadata reusable without exposing user-owned records.
+create index if not exists data_sources_authority_level_idx
+  on public.data_sources(authority_level);
+create index if not exists data_sources_source_type_idx
+  on public.data_sources(source_type);
