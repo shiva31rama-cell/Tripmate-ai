@@ -674,6 +674,18 @@ function TripsView({ guest, trips, onLogin, onOpenTrip, onRemoveTrip }) {
   );
 }
 
+function DemoSubmissionNotice({ title, text }) {
+  return (
+    <div className="notice-card" role="status">
+      <ShieldCheck size={20} />
+      <div>
+        <b>{title}</b>
+        <p>{text}</p>
+      </div>
+    </div>
+  );
+}
+
 function AuthModal({ mode, setMode, onClose, onGuest }) {
   const [submitted, setSubmitted] = useState(false);
 
