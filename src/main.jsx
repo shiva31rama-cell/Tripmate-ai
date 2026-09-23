@@ -688,32 +688,52 @@ function DemoSubmissionNotice({ title, text }) {
 
 function AuthModal({ mode, setMode, onClose, onGuest }) {
   const [submitted, setSubmitted] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  function submitAuth(event) {
+    event.preventDefault();
+    if (!email.trim() || !password.trim()) return;
+    setSubmitted(true);
+  }
 
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="auth-title">
       <div className="auth-modal">
-        <button className="close-button" onClick={onClose} aria-label="Close"><X /></button>
+        <button className="close-button" onClick={onClose} aria-label="Close">
+          <X />
+        </button>
 
         <div className="auth-head">
           <span className="brand-mark">T</span>
           <span className="eyebrow">TripMate AI</span>
           <h2 id="auth-title">{mode === "login" ? "Welcome back" : "Create your account"}</h2>
-          <p>{mode === "login" ? "Continue your travel planning." : "Save trips and sync them across devices."}</p>
+          <p>
+            {mode === "login"
+              ? "Continue your travel planning."
+              : "Save trips and sync them across devices."}
+          </p>
         </div>
 
         {submitted ? (
           <div className="success-card">
             <Check size={25} />
-            <h3>Auth UI is ready</h3>
+            <h3>Authentication UI is ready</h3>
             <p>
-              Connect Supabase Auth to replace this prototype submission with a real session.
-              Guest mode stays available.
+              The form is intentionally a prototype until Supabase Auth is connected.
+              No fake account or provider session is created here.
             </p>
-            <button className="primary-button" onClick={onGuest}>Continue as guest</button>
+            <button className="primary-button" onClick={onGuest}>
+              Continue as guest
+            </button>
           </div>
         ) : (
-          <>
-            <button className="google-button" onClick={() => setSubmitted(true)}>
+          <form onSubmit={submitAuth}>
+            <button
+              className="google-button"
+              type="button"
+              onClick={() => setSubmitted(true)}
+            >
               Continue with Google
             </button>
 
@@ -721,28 +741,50 @@ function AuthModal({ mode, setMode, onClose, onGuest }) {
 
             <label>
               Email
-              <input type="email" placeholder="you@example.com" />
-            </label>
-            <label>
-              Password
-              <input type="password" placeholder="••••••••" />
+              <input
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="you@example.com"
+                autoComplete="email"
+                required
+              />
             </label>
 
-            <button className="primary-button" onClick={() => setSubmitted(true)}>
+            <label>
+              Password
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="••••••••"
+                autoComplete={mode === "login" ? "current-password" : "new-password"}
+                required
+                minLength="6"
+              />
+            </label>
+
+            <button className="primary-button" type="submit">
               {mode === "login" ? "Login" : "Create account"}
             </button>
 
-            <button className="guest-button" onClick={onGuest}>
+            <button className="guest-button" type="button" onClick={onGuest}>
               Skip for now · Continue as guest
             </button>
 
             <p className="switch-auth">
               {mode === "login" ? "New to TripMate?" : "Already have an account?"}{" "}
-              <button onClick={() => setMode(mode === "login" ? "signup" : "login")}>
+              <button
+                type="button"
+                onClick={() => {
+                  setSubmitted(false);
+                  setMode(mode === "login" ? "signup" : "login");
+                }}
+              >
                 {mode === "login" ? "Sign up" : "Login"}
               </button>
             </p>
-          </>
+          </form>
         )}
       </div>
     </div>
