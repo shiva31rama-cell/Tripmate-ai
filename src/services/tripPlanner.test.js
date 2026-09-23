@@ -24,5 +24,7 @@ describe("createDemoTrip", () => {
 
     expect(result.ok).toBe(true);
     expect(result.trip.dataStatus).toBe("DEMO");
+    expect(result.trip.budget.total).toBeGreaterThan(0);
+    expect(result.trip.rentalPreview).toHaveLength(3);
   });
 });
