@@ -37,7 +37,7 @@ function App() {
   const [activeTab, setActiveTab] = useState("home");
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState("login");
-  const [guest, setGuest] = useState(true);
+  const [guest, setGuest] = useState(() => window.localStorage.getItem("tripmate.session.mode") !== "signed-in");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [travellers, setTravellers] = useState(2);
@@ -51,6 +51,14 @@ function App() {
   useEffect(() => {
     saveGuestTrips(guestTrips);
   }, [guestTrips]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("tripmate.session.mode", guest ? "guest" : "signed-in");
+    } catch {
+      // Session preference is best-effort only.
+    }
+  }, [guest]);
 
   const demoBudget = useMemo(
     () => calculateDemoBudget({ travellers, days }),
