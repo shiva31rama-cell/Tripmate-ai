@@ -133,3 +133,22 @@ The current main branch now also includes:
 ### Integration rule
 
 The UI is intentionally usable without API keys. Live booking, live fares, real availability, geocoding and AI generation are not fabricated. They should be added behind provider services once credentials and production services are configured.
+
+
+## Current development checkpoint
+
+Implemented directly on `main`:
+
+- Guest trip persistence service and tests
+- Local saved-trip open/remove flow
+- Explore search and destination-type filters
+- Rental vehicle filters
+- Data-status badges for prototype values
+- Provider result helpers with explicit messages/metadata
+- Provider boundary tests
+- Trip planner now reuses the budget service
+- Supabase RLS policies for user-owned trips, preferences, days, items, budget items and saved places
+- Public read policy for the source catalog
+- Supporting database indexes
+
+Live provider credentials are still intentionally not required for the prototype. Until connected, prices, availability, schedules, geocoding and authentication remain clearly labelled as demo/prototype behaviour rather than fabricated live data.
