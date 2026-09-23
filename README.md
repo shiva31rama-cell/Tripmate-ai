@@ -152,3 +152,13 @@ Implemented directly on `main`:
 - Supporting database indexes
 
 Live provider credentials are still intentionally not required for the prototype. Until connected, prices, availability, schedules, geocoding and authentication remain clearly labelled as demo/prototype behaviour rather than fabricated live data.
+
+
+## Next execution order
+
+1. Supabase Auth session and Google OAuth integration.
+2. Geocoding and route adapters with explicit unavailable states.
+3. Transport search adapters for trains, buses, flights and ferries.
+4. Rental, hotel, food and temple provider adapters with source/checked-at metadata.
+5. AI itinerary generation from validated structured provider data.
+6. Production tests and deployment configuration.
