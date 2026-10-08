@@ -338,7 +338,7 @@ function App() {
   );
 }
 
-function TripSearch({ from, to, setFrom, setTo, travellers, setTravellers, days, setDays, onPlan }) {
+function TripSearch({ from, to, setFrom, setTo, travellers, setTravellers, days, setDays, onPlan, isPlanning }) {
   const validation = validateTripInput({ from, to, travellers, days });
   const hasInput = Boolean(from || to || String(travellers) !== "2" || String(days) !== "3");
 
