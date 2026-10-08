@@ -25,6 +25,7 @@ import { demoRentals, demoTemples } from "./data/demoData";
 import { DATA_STATUS, TRAVEL_MODES } from "./types";
 import { STATUS_LABELS } from "./services/provenance";
 import { loadGuestTrips, removeGuestTrip, saveGuestTrips } from "./services/guestTrips";
+import { buildLiveTrip } from "./services/liveTravel";
 
 const featureCards = [
   { icon: <Users />, title: "Family trips", text: "Comfort-aware planning for adults, children and seniors." },
@@ -47,6 +48,7 @@ function App() {
   const [exploreQuery, setExploreQuery] = useState("");
   const [exploreType, setExploreType] = useState("all");
   const [rentalType, setRentalType] = useState("all");
+  const [isPlanning, setIsPlanning] = useState(false);
 
   useEffect(() => {
     saveGuestTrips(guestTrips);
@@ -90,25 +92,45 @@ function App() {
     [rentalType]
   );
 
-  function createPlan() {
-    const result = createDemoTrip({ from, to, travellers, days });
+  async function createPlan() {
+    const validation = validateTripInput({ from, to, travellers, days });
 
-    if (!result.ok) {
-      setPlan({ invalid: true, ...result.validation });
+    if (!validation.valid) {
+      setPlan({ invalid: true, ...validation });
       setActiveTab("plan");
       return;
     }
 
-    const trip = {
-      ...result.trip,
-      id: globalThis.crypto?.randomUUID?.() ?? String(Date.now()),
-      createdAt: new Date().toISOString(),
-      budget: demoBudget,
-    };
-
-    setPlan(trip);
-    setGuestTrips((current) => [trip, ...current.filter((item) => item.id !== trip.id)]);
+    setIsPlanning(true);
+    setPlan({ loading: true, source: from.trim(), destination: to.trim(), travellers, days });
     setActiveTab("plan");
+
+    try {
+      const live = await buildLiveTrip({ from, to, travellers, days });
+      const trip = {
+        id: globalThis.crypto?.randomUUID?.() ?? String(Date.now()),
+        createdAt: new Date().toISOString(),
+        source: live.context.trip.source,
+        destination: live.context.trip.destination,
+        travellers,
+        days,
+        dataStatus: live.status,
+        context: live.context,
+        ai: live.ai,
+        budget: live.context.budget,
+        note: "Route, destination discovery and weather are live open-data results. Booking fares and availability remain unavailable unless an authorized provider is connected.",
+      };
+      setPlan(trip);
+      setGuestTrips((current) => [trip, ...current.filter((item) => item.id !== trip.id)]);
+    } catch (error) {
+      setPlan({
+        invalid: true,
+        code: "LIVE_SERVICE_UNAVAILABLE",
+        message: error instanceof Error ? error.message : "Live travel service is unavailable. Please retry.",
+      });
+    } finally {
+      setIsPlanning(false);
+    }
   }
 
   function openAuth(mode = "login") {
@@ -562,7 +584,7 @@ function PlanView({ plan, estimatedBudget, from, to, travellers, days, onCreate,
           <Sparkles size={28} />
           <h2>No itinerary yet</h2>
           <p>Start on Home and enter a valid source and destination.</p>
-          <button className="primary-button small" onClick={onCreate}>Create draft trip</button>
+          <button className="primary-button small" onClick={onCreate}>Create live trip</button>
         </div>
       )}
 
@@ -580,25 +602,68 @@ function PlanView({ plan, estimatedBudget, from, to, travellers, days, onCreate,
           <div className="notice-card">
             <ShieldCheck size={20} />
             <div>
-              <b>Prototype data boundary</b>
+              <b>Live open-data boundary</b>
               <p>{plan.note}</p>
             </div>
           </div>
 
+          {plan.context?.route && (
+            <div className="status-grid">
+              <div className="status-card">
+                <span className="eyebrow">Live route</span>
+                <h3>{plan.context.route.distanceKm} km</h3>
+                <p>Driving distance · {plan.context.route.durationMinutes} min · {plan.context.route.provider}</p>
+              </div>
+              <div className="status-card">
+                <span className="eyebrow">Live weather</span>
+                <h3>{plan.context.weather ? `${plan.context.weather.temperatureC}°C` : "Unavailable"}</h3>
+                <p>
+                  {plan.context.weather
+                    ? `Feels ${plan.context.weather.apparentTemperatureC}°C · wind ${plan.context.weather.windSpeedKmh} km/h`
+                    : "Weather provider did not return current data."}
+                </p>
+              </div>
+              <div className="status-card">
+                <span className="eyebrow">Nearby places</span>
+                <h3>{plan.context.nearbyPlaces?.length ?? 0}</h3>
+                <p>OSM places of interest and places of worship found near the destination.</p>
+              </div>
+            </div>
+          )}
+
+          {plan.ai && (
+            <div className="notice-card">
+              <Sparkles size={20} />
+              <div>
+                <b>AI itinerary</b>
+                <p>{plan.ai.summary || "Generated from the validated live context."}</p>
+                {Array.isArray(plan.ai.dataWarnings) && plan.ai.dataWarnings.length > 0 && (
+                  <ul>
+                    {plan.ai.dataWarnings.slice(0, 5).map((warning) => <li key={warning}>{warning}</li>)}
+                  </ul>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="plan-grid">
             <div className="timeline">
-              {Array.from({ length: Math.min(plan.days, 6) }, (_, index) => (
-                <div className="timeline-item" key={index}>
-                  <span className="day-number">{index + 1}</span>
-                  <div>
-                    <b>Day {index + 1}</b>
-                    <p>
-                      Travel, explore verified places, add meals and choose local transport.
-                      Exact schedules appear when a connected provider supplies them.
-                    </p>
+              {Array.from({ length: Math.min(plan.days, 6) }, (_, index) => {
+                const aiDay = Array.isArray(plan.ai?.days) ? plan.ai.days[index] : null;
+                const places = plan.context?.nearbyPlaces?.slice(index * 3, index * 3 + 3) ?? [];
+                return (
+                  <div className="timeline-item" key={index}>
+                    <span className="day-number">{index + 1}</span>
+                    <div>
+                      <b>{aiDay?.title || `Day ${index + 1}`}</b>
+                      <p>{aiDay?.summary || "Explore verified destination places and keep booking-dependent activities unconfirmed until a provider is connected."}</p>
+                      {places.length > 0 && (
+                        <small>{places.map((place) => place.name).join(" · ")}</small>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               {plan.days > 6 && (
                 <div className="empty-card compact-empty">
                   <p>Days 7–{plan.days} are reserved for the connected itinerary engine.</p>
