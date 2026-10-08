@@ -162,3 +162,53 @@ Live provider credentials are still intentionally not required for the prototype
 4. Rental, hotel, food and temple provider adapters with source/checked-at metadata.
 5. AI itinerary generation from validated structured provider data.
 6. Production tests and deployment configuration.
+
+
+## Real-time open-source implementation
+
+The main branch now includes a working open-data travel pipeline:
+
+- OpenStreetMap Nominatim for deliberate, cached geocoding
+- OSRM for live road distance and duration
+- Overpass API for nearby tourism and places-of-worship discovery
+- Open-Meteo for current weather context
+- Ollama plus a local open-weight model for evidence-first itinerary generation
+- FastAPI service boundary so the React client does not call public providers directly
+- Process-local caching to reduce repeated public API traffic
+- Provider, status, source URL and checked-at metadata in returned live facts
+- Graceful UNAVAILABLE state for booking fares instead of fabricated prices
+- Docker stack for React/Nginx + FastAPI + Ollama
+- Nginx API proxy for same-origin production requests
+
+OpenStreetMap's public Nominatim service has strict capacity rules, including a maximum of one request per second and a requirement for an identifying User-Agent; TripMate therefore uses deliberate user-triggered searches, server-side caching and a switchable service URL rather than autocomplete or bulk geocoding. Overpass is a read-only OSM data-consumer API suited to targeted POI queries.
+
+### Run the real-time stack locally
+
+Pull the local AI model once:
+
+    ollama pull qwen2.5:7b
+
+Start the frontend:
+
+    npm install
+    npm run dev
+
+Start the open-data + AI service in another terminal:
+
+    cd ai
+    python -m pip install -r requirements.txt
+    uvicorn server:app --host 0.0.0.0 --port 8000
+
+The Vite dev server proxies /api and /health to FastAPI.
+
+For the full containerized stack:
+
+    docker compose -f docker-compose.ai.yml up --build
+
+Open http://localhost:8080 after startup. Pull the configured Ollama model once before the first AI itinerary request.
+
+### What is genuinely live vs not yet live
+
+Live with the open stack: location verification, road route distance/duration, nearby OSM places and current weather, plus local AI generation when Ollama is running.
+
+Not fabricated: train/flight/bus/hotel/rental booking fares, seat/room/vehicle availability, cancellation terms and booking confirmation. Those require authorized provider integrations. TripMate returns UNAVAILABLE instead of pretending open data contains commercial inventory.
