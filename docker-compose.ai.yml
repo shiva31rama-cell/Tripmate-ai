@@ -5,17 +5,28 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     depends_on:
-      - tripmate-ai-service
+      tripmate-ai-service:
+        condition: service_healthy
     ports:
       - "8080:80"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   ollama:
     image: ollama/ollama:latest
     restart: unless-stopped
     volumes:
       - ollama_data:/root/.ollama
-    ports:
-      - "11434:11434"
+    # Keep the model server on the internal Docker network, not exposed to the LAN.
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
 
   tripmate-ai-service:
     build:
@@ -24,13 +35,22 @@ services:
     environment:
       OLLAMA_BASE_URL: http://ollama:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b}
-      CORS_ORIGINS: "*"
-      APP_USER_AGENT: ${APP_USER_AGENT:-TripMateAI/0.2}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080}
+      APP_USER_AGENT: ${APP_USER_AGENT:-TripMateAI/0.2 (+https://github.com/shiva31rama-cell/Tripmate-ai)}
       CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS:-900}
+      NOMINATIM_MIN_INTERVAL_SECONDS: ${NOMINATIM_MIN_INTERVAL_SECONDS:-1.1}
     depends_on:
-      - ollama
-    ports:
-      - "8000:8000"
+      ollama:
+        condition: service_healthy
+    # Not published on the host; the frontend reaches this through Nginx.
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
 volumes:
   ollama_data:
