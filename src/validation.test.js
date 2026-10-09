@@ -23,9 +23,9 @@ describe("validateTripInput", () => {
 describe("calculateDemoBudget", () => {
   it("calculates total, per-person and per-day values deterministically", () => {
     const budget = calculateDemoBudget({ travellers: 2, days: 3 });
-    expect(budget.total).toBe(11000);
-    expect(budget.perPerson).toBe(5500);
-    expect(budget.perDay).toBeCloseTo(3666.6666667);
+    expect(budget.total).toBe(11850);
+    expect(budget.perPerson).toBe(5925);
+    expect(budget.perDay).toBe(3950);
     expect(budget.status).toBe("DEMO");
   });
 });
