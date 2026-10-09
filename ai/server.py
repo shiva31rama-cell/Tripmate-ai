@@ -286,8 +286,17 @@ async def trip_context(request: TripRequest) -> dict[str, Any]:
             destination = await geocode(client, destination_text)
         except HTTPException:
             raise
-        except httpx.HTTPError as exc:
-            raise HTTPException(status_code=503, detail="Location verification is temporarily unavailable. Please retry later.") from exc
+        except (httpx.HTTPError, json.JSONDecodeError, KeyError, ValueError, TypeError, IndexError) as exc:
+            raise HTTPException(status_code=503, detail="Location verification is temporarily unavailable or returned invalid data. Please retry later.") from exc
+
+        if (
+            (source.get("placeId") is not None and source.get("placeId") == destination.get("placeId"))
+            or (
+                abs(source["latitude"] - destination["latitude"]) < 0.0001
+                and abs(source["longitude"] - destination["longitude"]) < 0.0001
+            )
+        ):
+            raise HTTPException(status_code=400, detail="Source and destination resolve to the same verified place. Explore this city locally instead.")
 
         # Providers fail independently. Optional data outages should not erase verified context.
         route_data: dict[str, Any] = {
@@ -299,7 +308,7 @@ async def trip_context(request: TripRequest) -> dict[str, Any]:
         weather_data: dict[str, Any] | None = None
         try:
             route_data = await route(client, source, destination)
-        except (httpx.HTTPError, HTTPException, KeyError, ValueError):
+        except (httpx.HTTPError, HTTPException, json.JSONDecodeError, KeyError, ValueError, TypeError, IndexError):
             pass
         try:
             places = await nearby_places(client, destination)
