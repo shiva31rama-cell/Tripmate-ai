@@ -16,7 +16,12 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
@@ -24,8 +29,15 @@ jobs:
       - name: Run tests
         run: npm test
 
+      - name: Install backend dependencies
+        run: python -m pip install -r ai/requirements.txt
+
       - name: Check Python service syntax
         run: python -m compileall -q ai
+
+      - name: Run backend tests
+        working-directory: ai
+        run: python -m unittest discover -s . -p 'test_*.py'
 
       - name: Build
         run: npm run build
