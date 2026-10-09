@@ -138,3 +138,12 @@ h2 { font-size: clamp(27px, 4vw, 40px); margin: 8px 0 0; letter-spacing: -.03em;
   .rental-row strong, .rental-row .outline-button { grid-column: 2; justify-self: start; }
   .route-banner { align-items: start; flex-direction: column; }
 }
+
+
+/* Live-data provenance and itinerary detail */
+.source-links, .live-place-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.source-links a, .live-place-list a { color: var(--accent-dark); font-size: 12px; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+.activity-list { padding-left: 20px; margin: 12px 0; color: var(--ink); }
+.activity-list li { margin: 7px 0; line-height: 1.5; }
+.activity-list span { color: var(--muted); }
+button:disabled { opacity: .65; cursor: wait; }
