@@ -201,13 +201,12 @@ Start the open-data + AI service in another terminal:
 
 The Vite dev server proxies /api and /health to FastAPI.
 
-For the full containerized stack, start the services and then pull the model into the **container's persistent Ollama volume**:
+For the full containerized stack:
 
     docker compose -f docker-compose.ai.yml up --build -d
-    docker compose -f docker-compose.ai.yml exec ollama ollama pull qwen2.5:7b
     docker compose -f docker-compose.ai.yml logs -f tripmate-ai-service
 
-Open http://localhost:8080. The model download is several GB and only needs to be repeated if you change the model or remove the `ollama_data` volume. The Ollama and API ports are not published to the host in this compose setup; the browser reaches the API through Nginx.
+Compose waits for Ollama, automatically pulls the configured model into the persistent `ollama_data` volume, then starts the API. The first startup downloads several GB and may take a while; subsequent starts reuse the model. Open http://localhost:8080. The Ollama and API ports are not published to the host; the browser reaches the API through Nginx.
 
 ### What is genuinely live vs not yet live
 
