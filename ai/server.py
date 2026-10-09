@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import time
@@ -27,7 +28,10 @@ app.add_middleware(
 )
 
 _cache: dict[str, tuple[float, Any]] = {}
-CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "900"))
+CACHE_TTL_SECONDS = max(30, int(os.getenv("CACHE_TTL_SECONDS", "900")))
+NOMINATIM_MIN_INTERVAL_SECONDS = max(1.0, float(os.getenv("NOMINATIM_MIN_INTERVAL_SECONDS", "1.1")))
+_nominatim_lock = asyncio.Lock()
+_last_nominatim_request = 0.0
 
 
 class TripRequest(BaseModel):
@@ -76,10 +80,20 @@ async def geocode(client: httpx.AsyncClient, query: str) -> dict[str, Any]:
     hit = cached(key)
     if hit:
         return hit
-    data = await get_json(
-        client, f"{NOMINATIM_URL}/search",
-        params={"q": query, "format": "jsonv2", "limit": 1, "addressdetails": 1},
-    )
+    # Public Nominatim requires at most one request per second.
+    global _last_nominatim_request
+    async with _nominatim_lock:
+        wait = NOMINATIM_MIN_INTERVAL_SECONDS - (time.monotonic() - _last_nominatim_request)
+        if wait > 0:
+            await asyncio.sleep(wait)
+        try:
+            data = await get_json(
+                client, f"{NOMINATIM_URL}/search",
+                params={"q": query, "format": "jsonv2", "limit": 1, "addressdetails": 1},
+                timeout=15,
+            )
+        finally:
+            _last_nominatim_request = time.monotonic()
     if not data:
         raise HTTPException(status_code=404, detail=f"Could not verify location: {query}")
     item = data[0]
@@ -163,6 +177,7 @@ out center tags;
             "provider": "OpenStreetMap Overpass",
             "status": "LIVE",
             "sourceUrl": "https://www.openstreetmap.org/",
+            "checkedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         })
         if len(results) >= 20:
             break
@@ -227,9 +242,23 @@ async def create_ai_plan(context: dict[str, Any]) -> dict[str, Any]:
             response = await client.post(f"{OLLAMA_BASE_URL}/api/chat", json=payload)
             response.raise_for_status()
         data = response.json()
-        return json.loads(data.get("message", {}).get("content", "{}"))
-    except (httpx.HTTPError, json.JSONDecodeError, KeyError) as exc:
-        raise HTTPException(status_code=503, detail=f"Local AI planner unavailable: {exc}") from exc
+        result = json.loads(data.get("message", {}).get("content", "{}"))
+        if not isinstance(result, dict):
+            raise ValueError("AI response must be a JSON object")
+        result.setdefault("summary", "Itinerary generated from available source data.")
+        result.setdefault("days", [])
+        result.setdefault("budgetNotes", [])
+        result.setdefault("dataWarnings", [])
+        if not isinstance(result["days"], list):
+            result["days"] = []
+        if not isinstance(result["dataWarnings"], list):
+            result["dataWarnings"] = []
+        result["budgetNotes"] = [
+            "Live booking fares and availability are unavailable until an authorized provider is connected."
+        ]
+        return result
+    except (httpx.HTTPError, json.JSONDecodeError, KeyError, ValueError) as exc:
+        raise HTTPException(status_code=503, detail="Local AI planner unavailable or returned invalid JSON.") from exc
 
 
 @app.get("/health")
@@ -251,14 +280,35 @@ async def trip_context(request: TripRequest) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="Source and destination must be different.")
 
     async with httpx.AsyncClient() as client:
+        # Locations must be verified; never invent coordinates on geocoding failure.
         try:
             source = await geocode(client, source_text)
             destination = await geocode(client, destination_text)
-            route_data = await route(client, source, destination)
-            places = await nearby_places(client, destination)
-            weather_data = await weather(client, destination)
+        except HTTPException:
+            raise
         except httpx.HTTPError as exc:
-            raise HTTPException(status_code=503, detail=f"Open travel data service unavailable: {exc}") from exc
+            raise HTTPException(status_code=503, detail="Location verification is temporarily unavailable. Please retry later.") from exc
+
+        # Providers fail independently. Optional data outages should not erase verified context.
+        route_data: dict[str, Any] = {
+            "status": "UNAVAILABLE", "provider": "OSRM",
+            "message": "Driving route could not be verified right now.",
+            "sourceUrl": "https://project-osrm.org/",
+        }
+        places: list[dict[str, Any]] = []
+        weather_data: dict[str, Any] | None = None
+        try:
+            route_data = await route(client, source, destination)
+        except (httpx.HTTPError, HTTPException, KeyError, ValueError):
+            pass
+        try:
+            places = await nearby_places(client, destination)
+        except (httpx.HTTPError, HTTPException, KeyError, ValueError):
+            places = []
+        try:
+            weather_data = await weather(client, destination)
+        except (httpx.HTTPError, HTTPException, KeyError, ValueError):
+            weather_data = None
 
         context = {
             "trip": {"source": source["name"], "destination": destination["name"], "travellers": request.travellers, "days": request.days},
@@ -270,16 +320,29 @@ async def trip_context(request: TripRequest) -> dict[str, Any]:
                 "status": "UNAVAILABLE", "currency": "INR",
                 "message": "Live booking fares are not available from the open data layer; connect an authorized provider before showing a fare.",
             },
+            "providerWarnings": [
+                message for condition, message in [
+                    (route_data.get("status") == "UNAVAILABLE", "Driving route unavailable; try again later."),
+                    (not places, "No nearby places were returned. This may mean no mapped results or a temporary provider issue."),
+                    (weather_data is None, "Current weather unavailable."),
+                ] if condition
+            ],
         }
         ai_result = None
         try:
             ai_result = await create_ai_plan(context)
         except HTTPException:
-            ai_result = None
+            context["providerWarnings"].append("Local AI is unavailable; source-backed context is still available.")
 
     return {
         "status": "LIVE",
         "context": context,
         "ai": ai_result,
-        "sources": ["https://www.openstreetmap.org/", "https://project-osrm.org/", "https://open-meteo.com/"],
+        "sources": [
+            "https://www.openstreetmap.org/",
+            "https://project-osrm.org/",
+            "https://overpass-api.de/",
+            "https://open-meteo.com/",
+        ],
+        "checkedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
