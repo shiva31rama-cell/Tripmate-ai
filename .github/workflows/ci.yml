@@ -19,10 +19,13 @@ jobs:
           node-version: 20
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: Run tests
         run: npm test
+
+      - name: Check Python service syntax
+        run: python -m compileall -q ai
 
       - name: Build
         run: npm run build
