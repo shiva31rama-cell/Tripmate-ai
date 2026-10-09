@@ -216,6 +216,7 @@ function App() {
                 days={days}
                 setDays={setDays}
                 onPlan={createPlan}
+                isPlanning={isPlanning}
               />
             </section>
 
@@ -291,6 +292,7 @@ function App() {
           <PlanView
             plan={plan}
             estimatedBudget={demoBudget}
+            isPlanning={isPlanning}
             from={from}
             to={to}
             travellers={travellers}
@@ -355,7 +357,7 @@ function TripSearch({ from, to, setFrom, setTo, travellers, setTravellers, days,
           <span className="eyebrow">AI trip planner</span>
           <h3>Where are you going?</h3>
         </div>
-        <StatusBadge status={DATA_STATUS.DEMO} />
+        <span className="data-status">Live lookup</span>
       </div>
 
       <div className="field-row">
@@ -395,8 +397,8 @@ function TripSearch({ from, to, setFrom, setTo, travellers, setTravellers, days,
 
       {hasInput && !validation.valid && <div className="inline-error" role="alert">{validation.message}</div>}
 
-      <button className="primary-button" type="submit">
-        <Sparkles size={18} /> Create my trip <ArrowRight size={18} />
+      <button className="primary-button" type="submit" disabled={isPlanning}>
+        <Sparkles size={18} /> {isPlanning ? "Checking live sources…" : "Create my trip"} <ArrowRight size={18} />
       </button>
       <p className="helper">
         Live prices, schedules and availability appear only after a verified source is connected.
@@ -560,7 +562,7 @@ function Explore({ query, setQuery, type, setType, places, rentalType, setRental
   );
 }
 
-function PlanView({ plan, estimatedBudget, from, to, travellers, days, onCreate, onLocalExplore }) {
+function PlanView({ plan, estimatedBudget, isPlanning, from, to, travellers, days, onCreate, onLocalExplore }) {
   return (
     <section className="page-section">
       <div className="page-header">
@@ -579,7 +581,15 @@ function PlanView({ plan, estimatedBudget, from, to, travellers, days, onCreate,
         </div>
       )}
 
-      {!plan && (
+      {(isPlanning || plan?.loading) && (
+        <div className="empty-card" role="status" aria-live="polite">
+          <Sparkles size={28} />
+          <h2>Checking live travel sources…</h2>
+          <p>Verifying both locations, then checking road routing, nearby mapped places and current weather. Booking prices are not part of these open-data services.</p>
+        </div>
+      )}
+
+      {!plan && !isPlanning && (
         <div className="empty-card">
           <Sparkles size={28} />
           <h2>No itinerary yet</h2>
@@ -588,7 +598,7 @@ function PlanView({ plan, estimatedBudget, from, to, travellers, days, onCreate,
         </div>
       )}
 
-      {plan && !plan.invalid && (
+      {plan && !plan.invalid && !plan.loading && (
         <>
           <div className="route-banner">
             <div>
@@ -604,6 +614,8 @@ function PlanView({ plan, estimatedBudget, from, to, travellers, days, onCreate,
             <div>
               <b>Live open-data boundary</b>
               <p>{plan.note}</p>
+              {plan.context?.destination?.checkedAt && <small>Location checked: {new Date(plan.context.destination.checkedAt).toLocaleString()}</small>}
+              {Array.isArray(plan.sources) && <div className="source-links">{plan.sources.map((source) => <a href={source} target="_blank" rel="noreferrer noopener" key={source}>{new URL(source).hostname} ↗</a>)}</div>}
             </div>
           </div>
 
@@ -637,9 +649,9 @@ function PlanView({ plan, estimatedBudget, from, to, travellers, days, onCreate,
               <div>
                 <b>AI itinerary</b>
                 <p>{plan.ai.summary || "Generated from the validated live context."}</p>
-                {Array.isArray(plan.ai.dataWarnings) && plan.ai.dataWarnings.length > 0 && (
+                {[...(Array.isArray(plan.ai.dataWarnings) ? plan.ai.dataWarnings : []), ...(Array.isArray(plan.context?.providerWarnings) ? plan.context.providerWarnings : [])].length > 0 && (
                   <ul>
-                    {plan.ai.dataWarnings.slice(0, 5).map((warning) => <li key={warning}>{warning}</li>)}
+                    {[...(Array.isArray(plan.ai.dataWarnings) ? plan.ai.dataWarnings : []), ...(Array.isArray(plan.context?.providerWarnings) ? plan.context.providerWarnings : [])].slice(0, 8).map((warning, index) => <li key={String(index) + warning}>{warning}</li>)}
                   </ul>
                 )}
               </div>
@@ -651,14 +663,32 @@ function PlanView({ plan, estimatedBudget, from, to, travellers, days, onCreate,
               {Array.from({ length: Math.min(plan.days, 6) }, (_, index) => {
                 const aiDay = Array.isArray(plan.ai?.days) ? plan.ai.days[index] : null;
                 const places = plan.context?.nearbyPlaces?.slice(index * 3, index * 3 + 3) ?? [];
+                const activities = Array.isArray(aiDay?.activities) ? aiDay.activities : Array.isArray(aiDay?.items) ? aiDay.items : [];
                 return (
                   <div className="timeline-item" key={index}>
                     <span className="day-number">{index + 1}</span>
                     <div>
-                      <b>{aiDay?.title || `Day ${index + 1}`}</b>
-                      <p>{aiDay?.summary || "Explore verified destination places and keep booking-dependent activities unconfirmed until a provider is connected."}</p>
+                      <b>{aiDay?.title || ("Day " + (index + 1))}</b>
+                      <p>{aiDay?.summary || "Use the mapped places below as discovery suggestions; opening hours and entry details still need confirmation."}</p>
+                      {activities.length > 0 && (
+                        <ul className="activity-list">
+                          {activities.slice(0, 8).map((activity, activityIndex) => {
+                            const title = typeof activity === "string" ? activity : activity?.title || activity?.name || "Suggested activity";
+                            const detail = typeof activity === "object" ? activity?.description || activity?.notes : "";
+                            return <li key={String(activityIndex) + title}><b>{title}</b>{detail ? <span> — {detail}</span> : null}</li>;
+                          })}
+                        </ul>
+                      )}
                       {places.length > 0 && (
-                        <small>{places.map((place) => place.name).join(" · ")}</small>
+                        <div className="live-place-list">
+                          {places.map((place) => {
+                            const lat = Number(place.latitude), lon = Number(place.longitude);
+                            const mapUrl = Number.isFinite(lat) && Number.isFinite(lon)
+                              ? "https://www.openstreetmap.org/?mlat=" + lat + "&mlon=" + lon + "#map=16/" + lat + "/" + lon
+                              : "https://www.openstreetmap.org/";
+                            return <a key={place.id || place.name} href={mapUrl} target="_blank" rel="noreferrer noopener">{place.name} ↗</a>;
+                          })}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -672,22 +702,26 @@ function PlanView({ plan, estimatedBudget, from, to, travellers, days, onCreate,
             </div>
 
             <div className="budget-card">
-              <span className="eyebrow">Budget preview</span>
-              <h2>₹{estimatedBudget.total.toLocaleString()}</h2>
-              <p>
-                Estimated group total for {travellers} traveller{travellers === 1 ? "" : "s"}.
-                This is not a live quote.
-              </p>
-              {estimatedBudget.items.map((item) => (
-                <div className="budget-line" key={item.category}>
-                  <span>{item.category}</span>
-                  <b>₹{item.amount.toLocaleString()}</b>
-                </div>
-              ))}
-              <div className="budget-summary">
-                <span>Per person</span><b>₹{Math.round(estimatedBudget.perPerson).toLocaleString()}</b>
-                <span>Per day</span><b>₹{Math.round(estimatedBudget.perDay).toLocaleString()}</b>
-              </div>
+              <span className="eyebrow">Budget & booking data</span>
+              <StatusBadge status={plan.budget?.status || plan.context?.budget?.status || "UNAVAILABLE"} />
+              {plan.dataStatus === "DEMO" ? (
+                <>
+                  <h2>₹{estimatedBudget.total.toLocaleString()}</h2>
+                  <p>Illustrative demo estimate for {travellers} traveller{travellers === 1 ? "" : "s"} — not a quote and not based on live provider prices.</p>
+                  {estimatedBudget.items.map((item) => (
+                    <div className="budget-line" key={item.category}><span>{item.category}</span><b>₹{item.amount.toLocaleString()}</b></div>
+                  ))}
+                  <div className="budget-summary"><span>Per person (demo)</span><b>₹{Math.round(estimatedBudget.perPerson).toLocaleString()}</b><span>Per day (demo)</span><b>₹{Math.round(estimatedBudget.perDay).toLocaleString()}</b></div>
+                </>
+              ) : (
+                <>
+                  <h2>Not available yet</h2>
+                  <p>{plan.context?.budget?.message || "Live transport fares, accommodation prices and booking availability are not connected. No total is estimated or presented as a quote."}</p>
+                  <div className="budget-line"><span>Live fares</span><b>Unavailable</b></div>
+                  <div className="budget-line"><span>Live stays</span><b>Unavailable</b></div>
+                  <div className="budget-line"><span>Live rentals</span><b>Unavailable</b></div>
+                </>
+              )}
             </div>
           </div>
         </>
