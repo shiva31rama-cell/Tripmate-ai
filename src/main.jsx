@@ -38,7 +38,7 @@ function App() {
   const [activeTab, setActiveTab] = useState("home");
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState("login");
-  const [guest, setGuest] = useState(() => window.localStorage.getItem("tripmate.session.mode") !== "signed-in");
+  const [guest, setGuest] = useState(true);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [travellers, setTravellers] = useState(2);
