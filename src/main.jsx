@@ -123,10 +123,13 @@ function App() {
       setPlan(trip);
       setGuestTrips((current) => [trip, ...current.filter((item) => item.id !== trip.id)]);
     } catch (error) {
+      const message = error instanceof Error ? error.message : "Live travel service is unavailable. Please retry.";
       setPlan({
         invalid: true,
-        code: "LIVE_SERVICE_UNAVAILABLE",
-        message: error instanceof Error ? error.message : "Live travel service is unavailable. Please retry.",
+        code: message.toLowerCase().includes("same verified place") || message.toLowerCase().includes("source and destination are the same")
+          ? "SAME_LOCATION"
+          : "LIVE_SERVICE_UNAVAILABLE",
+        message,
       });
     } finally {
       setIsPlanning(false);
