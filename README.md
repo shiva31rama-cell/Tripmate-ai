@@ -201,14 +201,40 @@ Start the open-data + AI service in another terminal:
 
 The Vite dev server proxies /api and /health to FastAPI.
 
-For the full containerized stack:
+For the full containerized stack, start the services and then pull the model into the **container's persistent Ollama volume**:
 
-    docker compose -f docker-compose.ai.yml up --build
+    docker compose -f docker-compose.ai.yml up --build -d
+    docker compose -f docker-compose.ai.yml exec ollama ollama pull qwen2.5:7b
+    docker compose -f docker-compose.ai.yml logs -f tripmate-ai-service
 
-Open http://localhost:8080 after startup. Pull the configured Ollama model once before the first AI itinerary request.
+Open http://localhost:8080. The model download is several GB and only needs to be repeated if you change the model or remove the `ollama_data` volume. The Ollama and API ports are not published to the host in this compose setup; the browser reaches the API through Nginx.
 
 ### What is genuinely live vs not yet live
 
 Live with the open stack: location verification, road route distance/duration, nearby OSM places and current weather, plus local AI generation when Ollama is running.
 
 Not fabricated: train/flight/bus/hotel/rental booking fares, seat/room/vehicle availability, cancellation terms and booking confirmation. Those require authorized provider integrations. TripMate returns UNAVAILABLE instead of pretending open data contains commercial inventory.
+
+
+## Current implementation status (truthful boundary)
+
+**Available now**
+- Live, user-triggered location lookup through Nominatim, OSRM driving routes, Overpass nearby mapped places, and Open-Meteo current weather, with cache and provider warnings.
+- Local Ollama itinerary suggestions when the configured model is downloaded and running.
+- Guest trip saving in the current browser only.
+- OpenStreetMap map links and visible provider source links for generated live trip context.
+- A database foundation and owner-scoped RLS policies in migrations `001` and `002`.
+
+**Not connected / not a live booking feature**
+- Email/password authentication and Google OAuth: the modal is a UI prototype and does not create a session.
+- Cross-device account sync and persistence: Supabase schema exists but the frontend is not yet wired to Supabase.
+- Train, bus, flight, taxi, ferry, accommodation, restaurant and rental inventory, fares, seat/room/vehicle availability, offers, cancellations or booking confirmations. These require authorized provider integrations.
+- Official temple schedules, darshan slots and cultural/heritage content ingestion. Demo Explore cards remain explicitly demo data.
+- The current route is an **OSRM driving route**, not a comparison across all transport modes.
+- An estimate for real-world trip cost is intentionally not shown on a live plan until a source-backed fare/stay provider is connected.
+
+### Database setup
+Apply Supabase migrations in order: `supabase/migrations/001_tripmate_foundation.sql`, then `supabase/migrations/002_tripmate_rls_policies.sql`. The second migration adds owner-only read/write policies for profiles, trips, nested trip records, saved places and budget items. Applying the SQL does not itself connect Supabase Auth or persistence to the frontend.
+
+### Public provider limits
+The public Nominatim endpoint is rate-limited. The backend serializes uncached geocoding requests within its single API worker and caches results. If you scale the API to multiple workers/replicas, use a shared rate limiter and cache or configure a hosted Nominatim-compatible provider before increasing traffic. Do not add autocomplete or bulk geocoding against the public endpoint.
