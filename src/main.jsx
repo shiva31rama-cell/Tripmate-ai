@@ -59,6 +59,7 @@ function App() {
   const [livePlacesCheckedAt, setLivePlacesCheckedAt] = useState("");
   const [livePlacesError, setLivePlacesError] = useState("");
   const [isSearchingPlaces, setIsSearchingPlaces] = useState(false);
+  const [isImportingGuestTrips, setIsImportingGuestTrips] = useState(false);
   const [isPlanning, setIsPlanning] = useState(false);
 
   useEffect(() => {
@@ -260,6 +261,29 @@ function App() {
     }
   }
 
+  async function importGuestTrips() {
+    if (!user || !supabase || guestTrips.length === 0) return;
+    setIsImportingGuestTrips(true);
+    const remaining = [];
+    const imported = [];
+    for (const trip of guestTrips) {
+      try {
+        imported.push(await saveCloudTrip(supabase, user.id, trip));
+      } catch {
+        remaining.push(trip);
+      }
+    }
+    setCloudTrips((current) => {
+      const importedIds = new Set(imported.map((trip) => trip.id));
+      return [...imported, ...current.filter((trip) => !importedIds.has(trip.id))];
+    });
+    setGuestTrips(remaining);
+    setSyncNotice(remaining.length
+      ? `Synced ${imported.length} browser trip(s); ${remaining.length} could not sync and remain saved locally. Check that migrations 001–003 are applied.`
+      : `Moved ${imported.length} browser trip(s) into your TripMate account.`);
+    setIsImportingGuestTrips(false);
+  }
+
   function startLocalExplore() {
     setActiveTab("explore");
     if (from.trim()) setExploreQuery(from.trim());
@@ -430,6 +454,9 @@ function App() {
             guest={guest}
             trips={[...cloudTrips, ...guestTrips]}
             syncNotice={syncNotice}
+            localTripCount={guestTrips.length}
+            isImportingGuestTrips={isImportingGuestTrips}
+            onImportGuestTrips={importGuestTrips}
             onLogin={() => openAuth("login")}
             onOpenTrip={openSavedTrip}
             onRemoveTrip={removeSavedTrip}
@@ -649,9 +676,11 @@ function Explore({
                 <article className="live-place-card" key={place.id || place.name}>
                   <span className="live-badge">LIVE · OpenStreetMap</span>
                   <h3>{place.name}</h3>
-                  <p>{String(place.category || "mapped place").replaceAll("_", " ")}</p>
-                  <a href={mapUrl} target="_blank" rel="noreferrer noopener">View on map ↗</a>
+                  <p>{[place.category, place.religion, place.denomination].filter(Boolean).join(" · ").replaceAll("_", " ") || "Mapped place"}</p>
+                  {place.openingHours && <small>OSM opening-hours tag: {place.openingHours} · confirm with venue</small>}
+                  <a href={place.osmUrl || mapUrl} target="_blank" rel="noreferrer noopener">View source map ↗</a>
                   {place.website && <a href={place.website} target="_blank" rel="noreferrer noopener">Listed website ↗</a>}
+                  {place.wikidata && /^Q\d+$/.test(place.wikidata) && <a href={`https://www.wikidata.org/wiki/${place.wikidata}`} target="_blank" rel="noreferrer noopener">Wikidata record ↗</a>}
                 </article>
               );
             })}
@@ -924,7 +953,10 @@ function PlanView({ plan, estimatedBudget, isPlanning, from, to, travellers, day
   );
 }
 
-function TripsView({ guest, trips, syncNotice, onLogin, onOpenTrip, onRemoveTrip }) {
+function TripsView({
+  guest, trips, syncNotice, localTripCount, isImportingGuestTrips,
+  onImportGuestTrips, onLogin, onOpenTrip, onRemoveTrip,
+}) {
   return (
     <section className="page-section">
       <div className="page-header">
@@ -932,6 +964,15 @@ function TripsView({ guest, trips, syncNotice, onLogin, onOpenTrip, onRemoveTrip
         <h1>Your travel workspace</h1>
         <p>{guest ? "Guest trips stay in this browser. Sign in to save new plans and sync them across devices." : "Your account trips are stored in Supabase and protected by row-level security."}</p>
         {syncNotice && <div className="sync-notice" role="status">{syncNotice}</div>}
+        {!guest && localTripCount > 0 && (
+          <div className="sync-notice">
+            <b>{localTripCount} trip(s) are still only in this browser.</b>
+            <p>Import them into your account to access them on other devices. Any previous demo prices stay labelled as demo data.</p>
+            <button className="primary-button small" type="button" onClick={onImportGuestTrips} disabled={isImportingGuestTrips}>
+              {isImportingGuestTrips ? "Importing trips…" : "Import browser trips to account"}
+            </button>
+          </div>
+        )}
       </div>
 
       {trips.length > 0 ? (
