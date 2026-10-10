@@ -8,6 +8,7 @@ import {
   ChevronRight,
   CircleUserRound,
   Compass,
+  Footprints,
   Home,
   MapPin,
   Menu,
@@ -29,6 +30,7 @@ import { buildLiveTrip, searchMapPlaces } from "./services/liveTravel";
 import { supabase, isSupabaseConfigured } from "./services/supabaseClient";
 import { deleteCloudTrip, listCloudTrips, saveCloudTrip } from "./services/cloudTrips";
 import { buildTravelSearchLinks } from "./services/travelLinks";
+import LocalGuide from "./components/LocalGuide";
 
 const featureCards = [
   { icon: <Users />, title: "Family trips", text: "Comfort-aware planning for adults, children and seniors." },
@@ -39,6 +41,7 @@ const featureCards = [
 
 function App() {
   const [activeTab, setActiveTab] = useState("home");
+  const [guideLanguage, setGuideLanguage] = useState("en");
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState("login");
   const [guest, setGuest] = useState(true);
@@ -70,6 +73,10 @@ function App() {
   useEffect(() => {
     saveGuestTrips(guestTrips);
   }, [guestTrips]);
+
+  useEffect(() => {
+    document.documentElement.lang = guideLanguage === "te" ? "te" : guideLanguage === "hi" ? "hi" : "en";
+  }, [guideLanguage]);
 
   useEffect(() => {
     if (!supabase) return undefined;
@@ -307,8 +314,7 @@ function App() {
   }
 
   function startLocalExplore() {
-    setActiveTab("explore");
-    if (from.trim()) setExploreQuery(from.trim());
+    setActiveTab("guide");
   }
 
   function openSavedTrip(trip) {
@@ -329,7 +335,7 @@ function App() {
         </button>
 
         <nav className="desktop-nav" aria-label="Primary navigation">
-          {[["home", "Home"], ["explore", "Explore"], ["plan", "Plan"], ["trips", "My Trips"]].map(
+          {[["home", "Home"], ["explore", "Explore"], ["guide", ({ en: "Local Guide", te: "స్థానిక గైడ్", hi: "स्थानीय गाइड" })[guideLanguage]], ["plan", "Plan"], ["trips", "My Trips"]].map(
             ([key, label]) => (
               <button
                 className={activeTab === key ? "nav-link active" : "nav-link"}
@@ -344,6 +350,14 @@ function App() {
 
         <div className="top-actions">
           <span className="guest-pill">{guest ? "Guest mode" : (user?.email || "Signed in")}</span>
+          <label className="language-picker">
+            <span className="sr-only">Guide language</span>
+            <select value={guideLanguage} onChange={(event) => setGuideLanguage(event.target.value)} aria-label="Guide language">
+              <option value="en">English</option>
+              <option value="te">తెలుగు</option>
+              <option value="hi">हिन्दी</option>
+            </select>
+          </label>
           <button className="icon-button" onClick={() => openAuth("login")} aria-label="Account">
             <CircleUserRound size={20} />
           </button>
@@ -367,6 +381,9 @@ function App() {
                   TripMate brings routes, stays, rentals, temples, attractions and transparent
                   budgets into one simple travel workspace.
                 </p>
+                <button className="outline-button hero-guide-button" type="button" onClick={() => setActiveTab("guide")}>
+                  <Footprints size={17} /> First time here? Open Local Guide
+                </button>
               </div>
 
               <TripSearch
@@ -438,6 +455,8 @@ function App() {
           </>
         )}
 
+        {activeTab === "guide" && <LocalGuide language={guideLanguage} />}
+
         {activeTab === "explore" && (
           <Explore
             query={exploreQuery}
@@ -492,11 +511,11 @@ function App() {
       </main>
 
       <div className="mobile-nav">
-        {[["home", Home, "Home"], ["explore", Compass, "Explore"], ["plan", Sparkles, "Plan"], ["trips", CalendarDays, "My Trips"], ["more", Menu, "More"]].map(
+        {[["home", Home, "Home"], ["explore", Compass, "Explore"], ["guide", Footprints, ({ en: "Guide", te: "గైడ్", hi: "गाइड" })[guideLanguage]], ["plan", Sparkles, "Plan"], ["trips", CalendarDays, "My Trips"]].map(
           ([key, Icon, label]) => (
             <button
               className={activeTab === key ? "mobile-nav-item active" : "mobile-nav-item"}
-              onClick={() => (key === "more" ? openAuth("login") : setActiveTab(key))}
+              onClick={() => setActiveTab(key)}
               key={key}
             >
               <Icon size={20} />
