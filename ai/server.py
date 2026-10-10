@@ -35,8 +35,8 @@ _last_nominatim_request = 0.0
 
 
 class TripRequest(BaseModel):
-    from_: str | None = Field(default=None, alias="from")
-    to: str
+    from_: str | None = Field(default=None, alias="from", max_length=200)
+    to: str = Field(min_length=1, max_length=200)
     travellers: int = Field(default=1, ge=1, le=30)
     days: int = Field(default=3, ge=1, le=60)
 
@@ -60,7 +60,16 @@ def cached(key: str) -> Any | None:
 
 
 def put_cache(key: str, value: Any) -> Any:
-    _cache[key] = (time.time(), value)
+    # Keep this process-local cache bounded under varied user searches.
+    now = time.time()
+    expired = [cache_key for cache_key, (created, _) in _cache.items()
+               if now - created > CACHE_TTL_SECONDS]
+    for cache_key in expired:
+        _cache.pop(cache_key, None)
+    if key not in _cache and len(_cache) >= 1000:
+        oldest_key = min(_cache, key=lambda cache_key: _cache[cache_key][0])
+        _cache.pop(oldest_key, None)
+    _cache[key] = (now, value)
     return value
 
 
@@ -97,10 +106,13 @@ async def geocode(client: httpx.AsyncClient, query: str) -> dict[str, Any]:
     if not data:
         raise HTTPException(status_code=404, detail=f"Could not verify location: {query}")
     item = data[0]
+    latitude, longitude = float(item["lat"]), float(item["lon"])
+    if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
+        raise HTTPException(status_code=502, detail="Location provider returned invalid coordinates.")
     result = {
         "name": item.get("display_name", query),
-        "latitude": float(item["lat"]),
-        "longitude": float(item["lon"]),
+        "latitude": latitude,
+        "longitude": longitude,
         "placeId": item.get("osm_id"),
         "provider": "OpenStreetMap Nominatim",
         "status": "LIVE",
