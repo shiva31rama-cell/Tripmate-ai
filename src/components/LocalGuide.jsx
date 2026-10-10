@@ -26,7 +26,13 @@ const COPY = {
     transitFirst: "Longer distance — compare public transport",
     mobilityNote: "This suggestion uses straight-line distance only. Check the actual route, sidewalks, lighting, weather and local conditions before deciding.",
     guideTipTitle: "A smarter way to move around",
-    guideTip: "For a short trip, compare walking first. Open walking directions to check the actual route. If the path seems isolated, lacks sidewalks, is blocked, or it is late, choose a trusted local transport option instead of taking an unsafe shortcut.",
+    guideTip: "For a short trip, compare walking first. Open walking directions to check the actual route. Before accepting a ride, ask the total fare or confirm the meter before starting. If the path seems isolated, lacks sidewalks, is blocked, or it is late, choose trusted local transport instead of an unsafe shortcut.",
+    quickQuestions: [
+      { label: "Nearest bus/train stop", question: "Which nearby public transport stop is closest, and what should I check before using it?" },
+      { label: "Nearby food", question: "What food places are listed nearby, and which are within a short walk?" },
+      { label: "Walk or ride?", question: "For nearby places, should I check walking first or compare public transport? Do not guess fares." },
+      { label: "Pharmacy or ATM", question: "Are any pharmacies, ATMs, or other essential services in the nearby results?" },
+    ],
     transportNote: "This opens Google Maps. Transit choices, timings and fares appear only when its local data supports them; TripMate has not verified a live fare or departure.",
     attribution: "Nearby names and categories come from OpenStreetMap. Coverage, pedestrian access and opening details can be incomplete. Confirm the route and local conditions before setting off.",
     estimateNote: "Walking time is an estimate based on distance and an assumed detour; the real route can be longer.",
@@ -65,7 +71,13 @@ const COPY = {
     transitFirst: "దూరం ఎక్కువ — ప్రజా రవాణాను పరిశీలించండి",
     mobilityNote: "ఈ సూచన సూటి దూరం ఆధారంగా మాత్రమే ఉంటుంది. నిర్ణయం తీసుకునే ముందు అసలు దారి, ఫుట్‌పాత్‌లు, వెలుతురు, వాతావరణం, స్థానిక పరిస్థితులు చూడండి.",
     guideTipTitle: "తెలివిగా ప్రయాణించే మార్గం",
-    guideTip: "చిన్న దూరం అయితే ముందుగా నడకను పరిశీలించండి. అసలు మార్గం చూడటానికి నడక దిశలను తెరవండి. మార్గం నిర్మానుష్యంగా ఉంటే, ఫుట్‌పాత్ లేకపోతే, మూసి ఉంటే లేదా ఆలస్యమైతే, ప్రమాదకరమైన షార్ట్‌కట్ బదులు నమ్మకమైన స్థానిక రవాణాను ఎంచుకోండి.",
+    guideTip: "చిన్న దూరం అయితే ముందుగా నడక మార్గాన్ని పరిశీలించండి. అసలు దారిని మ్యాప్‌లో చూడండి. వాహనం ఎక్కే ముందు మొత్తం ఛార్జీ ఎంత అని అడగండి లేదా మీటర్ పనిచేస్తుందో నిర్ధారించండి. దారి నిర్మానుష్యంగా ఉంటే, ఫుట్‌పాత్ లేకపోతే, మూసి ఉంటే లేదా ఆలస్యమైతే ప్రమాదకరమైన షార్ట్‌కట్ బదులు నమ్మకమైన రవాణాను ఎంచుకోండి.",
+    quickQuestions: [
+      { label: "దగ్గరి బస్ / రైలు స్టాప్", question: "దగ్గరలోని ప్రజా రవాణా స్టాప్ ఏది? దాన్ని ఉపయోగించే ముందు ఏమి తనిఖీ చేయాలి?" },
+      { label: "దగ్గరలో భోజనం", question: "మ్యాప్‌లో దగ్గరగా ఉన్న భోజన స్థలాలు ఏవి? ఏవి కొద్ది దూరం నడిచి చేరవచ్చు?" },
+      { label: "నడవాలా, వాహనమా?", question: "దగ్గరి ప్రదేశాలకు ముందుగా నడక మార్గం చూడాలా, లేక ప్రజా రవాణాను పోల్చాలా? ఛార్జీలను ఊహించవద్దు." },
+      { label: "ఫార్మసీ లేదా ATM", question: "దగ్గరలోని ఫలితాల్లో ఫార్మసీ, ATM లేదా ఇతర అవసరమైన సేవలు ఉన్నాయా?" },
+    ],
     transportNote: "ఇది Google Mapsను తెరుస్తుంది. స్థానిక సమాచారం ఉన్నప్పుడే రవాణా ఎంపికలు, సమయాలు, ఛార్జీలు కనిపిస్తాయి; TripMate ప్రత్యక్ష ఛార్జీ లేదా బయలుదేరే సమయాన్ని ధృవీకరించలేదు.",
     attribution: "ప్రదేశాల పేర్లు, వర్గాలు OpenStreetMap నుంచి వస్తాయి. సమాచారం, నడక దారి, తెరిచి ఉన్న సమయాలు అసంపూర్ణంగా ఉండవచ్చు. బయలుదేరే ముందు మార్గం, స్థానిక పరిస్థితులు నిర్ధారించండి.",
     estimateNote: "నడక సమయం దూరం, ఊహించిన అదనపు మార్గంపై ఆధారమైన అంచనా మాత్రమే; నిజమైన దారి ఎక్కువ కావచ్చు.",
@@ -104,7 +116,13 @@ const COPY = {
     transitFirst: "दूरी अधिक — सार्वजनिक परिवहन देखें",
     mobilityNote: "यह सुझाव केवल सीधी दूरी पर आधारित है। निर्णय से पहले असली रास्ता, फुटपाथ, रोशनी, मौसम और स्थानीय स्थिति जाँचें।",
     guideTipTitle: "आस-पास जाने का समझदार तरीका",
-    guideTip: "छोटी दूरी के लिए पहले पैदल जाने का विकल्प देखें। असली रास्ता जाँचने के लिए पैदल दिशा खोलें। रास्ता सुनसान लगे, फुटपाथ न हो, रास्ता बंद हो या देर हो गई हो, तो असुरक्षित शॉर्टकट के बजाय भरोसेमंद स्थानीय परिवहन चुनें।",
+    guideTip: "कम दूरी के लिए पहले पैदल रास्ता जाँचें। असली रास्ता मैप पर देखें। सवारी लेने से पहले कुल किराया पूछें या मीटर की पुष्टि करें। रास्ता सुनसान हो, फुटपाथ न हो, रास्ता बंद हो या देर हो गई हो, तो असुरक्षित शॉर्टकट के बजाय भरोसेमंद स्थानीय परिवहन चुनें।",
+    quickQuestions: [
+      { label: "नज़दीकी बस / ट्रेन स्टॉप", question: "सबसे नज़दीकी सार्वजनिक परिवहन स्टॉप कौन-सा है, और उपयोग से पहले क्या जाँचूँ?" },
+      { label: "पास में खाना", question: "मैप पर पास में खाने की कौन-सी जगहें हैं, और कौन-सी थोड़ी पैदल दूरी पर हैं?" },
+      { label: "पैदल या सवारी?", question: "पास की जगहों के लिए पहले पैदल रास्ता देखूँ या सार्वजनिक परिवहन की तुलना करूँ? किराया मत गढ़ें।" },
+      { label: "फार्मेसी या ATM", question: "क्या पास के परिणामों में कोई फार्मेसी, ATM या ज़रूरी सेवा है?" },
+    ],
     transportNote: "यह Google Maps खोलेगा। सार्वजनिक परिवहन, समय और किराया तभी दिखेंगे जब उस क्षेत्र का डेटा उपलब्ध होगा; TripMate ने लाइव किराया या प्रस्थान समय की पुष्टि नहीं की है।",
     attribution: "जगहों के नाम और श्रेणियाँ OpenStreetMap से हैं। कवरेज, पैदल पहुँच और खुलने के समय की जानकारी अधूरी हो सकती है। निकलने से पहले रास्ता और स्थानीय स्थिति जाँच लें।",
     estimateNote: "पैदल समय दूरी और अनुमानित अतिरिक्त रास्ते पर आधारित है; वास्तविक रास्ता लंबा हो सकता है।",
@@ -346,6 +364,13 @@ export default function LocalGuide({ language = "en" }) {
             <span className="eyebrow">{t.askTitle}</span>
             <p>{t.askIntro}</p>
           </div>
+        </div>
+        <div className="local-guide-quick-questions" aria-label={t.askTitle}>
+          {t.quickQuestions.map((item) => (
+            <button key={item.label} type="button" className="filter-chip" onClick={() => setQuestion(item.question)}>
+              {item.label}
+            </button>
+          ))}
         </div>
         <form className="local-guide-ask-form" onSubmit={submitQuestion}>
           <label className="guide-travellers">
