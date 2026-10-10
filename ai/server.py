@@ -47,6 +47,12 @@ class TripRequest(BaseModel):
         populate_by_name = True
 
 
+class LocalGuideRequest(BaseModel):
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+    radiusMeters: int = Field(default=1000, ge=300, le=5000)
+
+
 class AIRequest(BaseModel):
     context: dict[str, Any] = Field(default_factory=dict)
 
@@ -298,6 +304,138 @@ async def google_places_search(
     return results
 
 
+def haversine_distance_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance used for nearby sorting, not a pedestrian route."""
+    from math import asin, cos, radians, sin, sqrt
+
+    earth_radius_m = 6_371_000
+    d_lat = radians(lat2 - lat1)
+    d_lon = radians(lon2 - lon1)
+    a = sin(d_lat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(d_lon / 2) ** 2
+    return earth_radius_m * 2 * asin(min(1.0, sqrt(a)))
+
+
+def classify_local_guide_place(tags: dict[str, Any]) -> str:
+    amenity = str(tags.get("amenity", "")).lower()
+    tourism = str(tags.get("tourism", "")).lower()
+    historic = str(tags.get("historic", "")).lower()
+    highway = str(tags.get("highway", "")).lower()
+    railway = str(tags.get("railway", "")).lower()
+    public_transport = str(tags.get("public_transport", "")).lower()
+    shop = str(tags.get("shop", "")).lower()
+    leisure = str(tags.get("leisure", "")).lower()
+
+    if (highway == "bus_stop" or amenity in {"bus_station", "taxi"} or
+            public_transport in {"platform", "station", "stop_position"} or
+            railway in {"station", "halt", "tram_stop"}):
+        return "transport"
+    if amenity in {"restaurant", "cafe", "fast_food", "food_court", "ice_cream", "pub", "bar"} or shop == "bakery":
+        return "food"
+    if amenity in {"hospital", "clinic", "doctors", "pharmacy", "police", "toilets",
+                   "drinking_water", "atm", "bank", "convenience", "fuel"} or shop in {"convenience", "supermarket", "general"}:
+        return "essentials"
+    if amenity == "place_of_worship" or tourism in {"museum", "gallery", "artwork"} or historic:
+        return "culture"
+    if tourism or leisure == "park":
+        return "sights"
+    return "other"
+
+
+async def nearby_local_guide(
+    client: httpx.AsyncClient,
+    latitude: float,
+    longitude: float,
+    *,
+    radius_m: int = 1000,
+    result_limit: int = 60,
+) -> list[dict[str, Any]]:
+    """Fetch OSM nearby POIs and annotate estimates; never claim routing or service availability."""
+    radius_m = max(300, min(5000, int(radius_m)))
+    result_limit = max(1, min(80, int(result_limit)))
+    key = f"local-guide:{round(latitude, 4)}:{round(longitude, 4)}:{radius_m}:{result_limit}"
+    hit = cached(key)
+    if hit is not None:
+        return hit
+
+    selectors = [
+        f"nwr(around:{radius_m},{latitude},{longitude})[tourism];",
+        f"nwr(around:{radius_m},{latitude},{longitude})[historic];",
+        f'nwr(around:{radius_m},{latitude},{longitude})[amenity~"restaurant|cafe|fast_food|food_court|ice_cream|pub|bar|hospital|clinic|doctors|pharmacy|police|toilets|drinking_water|atm|bank|bus_station|taxi|place_of_worship"];',
+        f'nwr(around:{radius_m},{latitude},{longitude})[public_transport~"platform|station|stop_position"];',
+        f"nwr(around:{radius_m},{latitude},{longitude})[highway=bus_stop];",
+        f'nwr(around:{radius_m},{latitude},{longitude})[railway~"station|halt|tram_stop"];',
+        f'nwr(around:{radius_m},{latitude},{longitude})[shop~"convenience|supermarket|bakery|general"];',
+        f"nwr(around:{radius_m},{latitude},{longitude})[leisure=park];",
+    ]
+    query = "[out:json][timeout:20];\\n(\\n" + "\\n".join(selectors) + "\\n);\\nout center tags;"
+    response = await client.post(
+        OVERPASS_URL,
+        data={"data": query},
+        headers={"User-Agent": APP_USER_AGENT, "Accept": "application/json"},
+        timeout=30,
+    )
+    response.raise_for_status()
+    try:
+        elements = response.json().get("elements", [])
+    except (json.JSONDecodeError, AttributeError, TypeError) as exc:
+        raise HTTPException(status_code=502, detail="The nearby map provider returned invalid data.") from exc
+
+    results: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    for element in elements:
+        tags = element.get("tags", {})
+        category = classify_local_guide_place(tags)
+        fallback_names = {
+            "transport": "Public transport stop (unnamed on map)",
+            "food": "Food place (unnamed on map)",
+            "essentials": "Local service (unnamed on map)",
+            "culture": "Cultural or worship place (unnamed on map)",
+            "sights": "Attraction (unnamed on map)",
+            "other": None,
+        }
+        name = tags.get("name") or tags.get("local_ref") or tags.get("ref") or fallback_names[category]
+        if not name:
+            continue
+        identifier = f"{element.get('type')}:{element.get('id')}"
+        if identifier in seen:
+            continue
+        seen.add(identifier)
+        center = element.get("center", {})
+        try:
+            place_lat = float(element.get("lat", center.get("lat")))
+            place_lon = float(element.get("lon", center.get("lon")))
+        except (TypeError, ValueError):
+            continue
+        if not (-90 <= place_lat <= 90 and -180 <= place_lon <= 180):
+            continue
+        distance_m = haversine_distance_m(latitude, longitude, place_lat, place_lon)
+        # Explicit estimate: allow 25% extra distance for a possible route detour, at 4 km/h.
+        estimated_walk_minutes = max(1, int((distance_m * 1.25 / (4000 / 60)) + 0.999))
+        results.append({
+            "id": identifier,
+            "name": name,
+            "category": tags.get("tourism") or tags.get("amenity") or tags.get("highway") or tags.get("public_transport") or tags.get("shop") or tags.get("railway") or tags.get("historic") or "place",
+            "guideCategory": category,
+            "latitude": place_lat,
+            "longitude": place_lon,
+            "distanceMeters": round(distance_m),
+            "distanceStatus": "ESTIMATED",
+            "estimatedWalkMinutes": estimated_walk_minutes,
+            "estimatedWalkNote": "Approximation from straight-line distance with a 25% route-detour assumption; not a routed walking time.",
+            "openingHours": tags.get("opening_hours"),
+            "website": safe_http_url(tags.get("website")),
+            "phone": tags.get("phone") or tags.get("contact:phone"),
+            "provider": "OpenStreetMap Overpass",
+            "status": "LIVE",
+            "sourceUrl": "https://www.openstreetmap.org/",
+            "osmUrl": f"https://www.openstreetmap.org/{element.get('type')}/{element.get('id')}",
+            "checkedAt": now,
+        })
+    results.sort(key=lambda place: place["distanceMeters"])
+    return put_cache(key, results[:result_limit])
+
+
 async def nearby_rental_providers(client: httpx.AsyncClient, destination: dict[str, Any]) -> list[dict[str, Any]]:
     lat, lon = destination["latitude"], destination["longitude"]
     key = f"rentals:{round(lat, 3)}:{round(lon, 3)}"
@@ -541,6 +679,44 @@ async def health() -> dict[str, Any]:
 async def plan(request: AIRequest) -> dict[str, Any]:
     return {"status": "AI_GENERATED", "model": OLLAMA_MODEL, "result": await create_ai_plan(request.context)}
 
+
+
+@app.post("/api/local-guide")
+async def local_guide(request: LocalGuideRequest) -> dict[str, Any]:
+    """Return nearby map candidates for a user-initiated, one-time location search."""
+    checked_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    try:
+        async with httpx.AsyncClient() as client:
+            places = await nearby_local_guide(
+                client,
+                request.latitude,
+                request.longitude,
+                radius_m=request.radiusMeters,
+                result_limit=60,
+            )
+    except (httpx.HTTPError, HTTPException, json.JSONDecodeError, KeyError, ValueError, TypeError, IndexError) as exc:
+        return {
+            "status": "UNAVAILABLE",
+            "places": [],
+            "provider": "OpenStreetMap Overpass",
+            "radiusMeters": request.radiusMeters,
+            "checkedAt": checked_at,
+            "message": "The nearby map provider is temporarily unavailable. Try again later; unavailable data does not mean nearby services do not exist.",
+        }
+
+    return {
+        "status": "LIVE",
+        "places": places,
+        "provider": "OpenStreetMap Overpass",
+        "radiusMeters": request.radiusMeters,
+        "checkedAt": checked_at,
+        "message": (
+            "No mapped features were returned in this radius; map coverage may be incomplete."
+            if not places else
+            "Results are mapped features, not guarantees of opening, safety, access, transit service or current operating status. Distances are straight-line estimates."
+        ),
+        "sourceUrl": "https://www.openstreetmap.org/",
+    }
 
 
 @app.post("/api/places/search")
