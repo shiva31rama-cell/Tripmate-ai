@@ -25,7 +25,10 @@ import { demoRentals, demoTemples } from "./data/demoData";
 import { DATA_STATUS, TRAVEL_MODES } from "./types";
 import { STATUS_LABELS } from "./services/provenance";
 import { loadGuestTrips, removeGuestTrip, saveGuestTrips } from "./services/guestTrips";
-import { buildLiveTrip } from "./services/liveTravel";
+import { buildLiveTrip, searchMapPlaces } from "./services/liveTravel";
+import { supabase, isSupabaseConfigured } from "./services/supabaseClient";
+import { deleteCloudTrip, listCloudTrips, saveCloudTrip } from "./services/cloudTrips";
+import { buildTravelSearchLinks } from "./services/travelLinks";
 
 const featureCards = [
   { icon: <Users />, title: "Family trips", text: "Comfort-aware planning for adults, children and seniors." },
@@ -39,6 +42,9 @@ function App() {
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState("login");
   const [guest, setGuest] = useState(true);
+  const [user, setUser] = useState(null);
+  const [cloudTrips, setCloudTrips] = useState([]);
+  const [syncNotice, setSyncNotice] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [travellers, setTravellers] = useState(2);
@@ -48,6 +54,11 @@ function App() {
   const [exploreQuery, setExploreQuery] = useState("");
   const [exploreType, setExploreType] = useState("all");
   const [rentalType, setRentalType] = useState("all");
+  const [livePlaces, setLivePlaces] = useState([]);
+  const [livePlacesLocation, setLivePlacesLocation] = useState("");
+  const [livePlacesCheckedAt, setLivePlacesCheckedAt] = useState("");
+  const [livePlacesError, setLivePlacesError] = useState("");
+  const [isSearchingPlaces, setIsSearchingPlaces] = useState(false);
   const [isPlanning, setIsPlanning] = useState(false);
 
   useEffect(() => {
@@ -55,12 +66,51 @@ function App() {
   }, [guestTrips]);
 
   useEffect(() => {
-    try {
-      window.localStorage.setItem("tripmate.session.mode", guest ? "guest" : "signed-in");
-    } catch {
-      // Session preference is best-effort only.
+    if (!supabase) return undefined;
+    let mounted = true;
+
+    async function applySession(session) {
+      const nextUser = session?.user || null;
+      if (!mounted) return;
+      setUser(nextUser);
+      setGuest(!nextUser);
+      if (!nextUser) {
+        setCloudTrips([]);
+        return;
+      }
+      try {
+        const saved = await listCloudTrips(supabase, nextUser.id);
+        if (mounted) {
+          setCloudTrips(saved);
+          setSyncNotice("");
+        }
+      } catch (error) {
+        if (mounted) {
+          setCloudTrips([]);
+          setSyncNotice(
+            "Cloud sync could not load. Check your Supabase URL/key and apply migrations 001–003. " +
+            (error instanceof Error ? error.message : "")
+          );
+        }
+      }
     }
-  }, [guest]);
+
+    supabase.auth.getSession()
+      .then(({ data }) => applySession(data?.session))
+      .catch((error) => {
+        if (mounted) setSyncNotice(error instanceof Error ? error.message : "Could not restore your session.");
+      });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) setAuthOpen(false);
+      Promise.resolve().then(() => applySession(session));
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
 
   const demoBudget = useMemo(
     () => calculateDemoBudget({ travellers, days }),
@@ -92,6 +142,28 @@ function App() {
     [rentalType]
   );
 
+  async function searchExplorePlaces() {
+    const query = exploreQuery.trim();
+    if (query.length < 3) {
+      setLivePlacesError("Enter at least three characters, then search the live map.");
+      return;
+    }
+    setIsSearchingPlaces(true);
+    setLivePlacesError("");
+    try {
+      const result = await searchMapPlaces({ query });
+      setLivePlaces(result.places || []);
+      setLivePlacesLocation(result.location?.name || query);
+      setLivePlacesCheckedAt(result.checkedAt || "");
+    } catch (error) {
+      setLivePlaces([]);
+      setLivePlacesLocation("");
+      setLivePlacesError(error instanceof Error ? error.message : "Live map search is temporarily unavailable.");
+    } finally {
+      setIsSearchingPlaces(false);
+    }
+  }
+
   async function createPlan() {
     const validation = validateTripInput({ from, to, travellers, days });
 
@@ -121,7 +193,22 @@ function App() {
         note: "Route, destination discovery and weather are live open-data results. Booking fares and availability remain unavailable unless an authorized provider is connected.",
       };
       setPlan(trip);
-      setGuestTrips((current) => [trip, ...current.filter((item) => item.id !== trip.id)]);
+      if (user && supabase) {
+        try {
+          const saved = await saveCloudTrip(supabase, user.id, trip);
+          setCloudTrips((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
+          setPlan(saved);
+          setSyncNotice("Trip saved to your TripMate account.");
+        } catch (error) {
+          setGuestTrips((current) => [trip, ...current.filter((item) => item.id !== trip.id)]);
+          setSyncNotice(
+            "Cloud save failed; this trip is saved in this browser instead. " +
+            (error instanceof Error ? error.message : "")
+          );
+        }
+      } else {
+        setGuestTrips((current) => [trip, ...current.filter((item) => item.id !== trip.id)]);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Live travel service is unavailable. Please retry.";
       setPlan({
@@ -144,6 +231,33 @@ function App() {
   function continueGuest() {
     setGuest(true);
     setAuthOpen(false);
+  }
+
+  async function signOut() {
+    if (!supabase) return;
+    const { error } = await supabase.auth.signOut({ scope: "local" });
+    if (error) setSyncNotice(error.message);
+    else {
+      setUser(null);
+      setCloudTrips([]);
+      setGuest(true);
+      setAuthOpen(false);
+      setSyncNotice("Signed out. Guest trips remain in this browser.");
+    }
+  }
+
+  async function removeSavedTrip(trip) {
+    if (trip?.storage === "cloud" && user && supabase) {
+      try {
+        await deleteCloudTrip(supabase, user.id, trip.id);
+        setCloudTrips((current) => current.filter((item) => item.id !== trip.id));
+        setSyncNotice("Trip removed from your account.");
+      } catch (error) {
+        setSyncNotice(error instanceof Error ? error.message : "Could not remove this cloud trip.");
+      }
+    } else {
+      setGuestTrips((current) => removeGuestTrip(current, trip.id));
+    }
   }
 
   function startLocalExplore() {
@@ -183,7 +297,7 @@ function App() {
         </nav>
 
         <div className="top-actions">
-          <span className="guest-pill">{guest ? "Guest mode" : "Signed in"}</span>
+          <span className="guest-pill">{guest ? "Guest mode" : (user?.email || "Signed in")}</span>
           <button className="icon-button" onClick={() => openAuth("login")} aria-label="Account">
             <CircleUserRound size={20} />
           </button>
@@ -288,6 +402,12 @@ function App() {
             rentalType={rentalType}
             setRentalType={setRentalType}
             rentals={filteredRentals}
+            livePlaces={livePlaces}
+            livePlacesLocation={livePlacesLocation}
+            livePlacesCheckedAt={livePlacesCheckedAt}
+            livePlacesError={livePlacesError}
+            isSearchingPlaces={isSearchingPlaces}
+            onLiveSearch={searchExplorePlaces}
           />
         )}
 
@@ -308,10 +428,11 @@ function App() {
         {activeTab === "trips" && (
           <TripsView
             guest={guest}
-            trips={guestTrips}
+            trips={[...cloudTrips, ...guestTrips]}
+            syncNotice={syncNotice}
             onLogin={() => openAuth("login")}
             onOpenTrip={openSavedTrip}
-            onRemoveTrip={(id) => setGuestTrips((current) => removeGuestTrip(current, id))}
+            onRemoveTrip={removeSavedTrip}
           />
         )}
       </main>
@@ -337,6 +458,10 @@ function App() {
           setMode={setAuthMode}
           onClose={() => setAuthOpen(false)}
           onGuest={continueGuest}
+          configured={isSupabaseConfigured}
+          user={user}
+          onSignOut={signOut}
+          onAuthSuccess={() => setAuthOpen(false)}
         />
       )}
     </div>
@@ -452,7 +577,10 @@ function PlaceCard({ place }) {
   );
 }
 
-function Explore({ query, setQuery, type, setType, places, rentalType, setRentalType, rentals }) {
+function Explore({
+  query, setQuery, type, setType, places, rentalType, setRentalType, rentals,
+  livePlaces, livePlacesLocation, livePlacesCheckedAt, livePlacesError, isSearchingPlaces, onLiveSearch,
+}) {
   const availableTypes = [...new Set(demoTemples.map((place) => place.type))];
 
   return (
@@ -491,6 +619,50 @@ function Explore({ query, setQuery, type, setType, places, rentalType, setRental
         ))}
       </div>
 
+      <section className="live-search-panel">
+        <div className="live-search-heading">
+          <div>
+            <span className="eyebrow">Live map discovery</span>
+            <h2>Find mapped places near a city or landmark</h2>
+            <p>Search runs only when you press the button. Results come from OpenStreetMap; mapped coverage and opening details can be incomplete.</p>
+          </div>
+          <button className="primary-button small" type="button" onClick={onLiveSearch} disabled={isSearchingPlaces || query.trim().length < 3}>
+            <Search size={16} /> {isSearchingPlaces ? "Searching map…" : "Search live places"}
+          </button>
+        </div>
+        {livePlacesError && <p className="inline-error" role="alert">{livePlacesError}</p>}
+        {livePlacesLocation && (
+          <p className="live-search-meta">
+            Results near {livePlacesLocation}
+            {livePlacesCheckedAt ? ` · checked ${new Date(livePlacesCheckedAt).toLocaleString()}` : ""}
+          </p>
+        )}
+        {isSearchingPlaces && <p role="status">Checking the live map provider…</p>}
+        {!isSearchingPlaces && livePlaces.length > 0 && (
+          <div className="live-place-grid">
+            {livePlaces.map((place) => {
+              const lat = Number(place.latitude), lon = Number(place.longitude);
+              const mapUrl = Number.isFinite(lat) && Number.isFinite(lon)
+                ? `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=16/${lat}/${lon}`
+                : "https://www.openstreetmap.org/";
+              return (
+                <article className="live-place-card" key={place.id || place.name}>
+                  <span className="live-badge">LIVE · OpenStreetMap</span>
+                  <h3>{place.name}</h3>
+                  <p>{String(place.category || "mapped place").replaceAll("_", " ")}</p>
+                  <a href={mapUrl} target="_blank" rel="noreferrer noopener">View on map ↗</a>
+                  {place.website && <a href={place.website} target="_blank" rel="noreferrer noopener">Listed website ↗</a>}
+                </article>
+              );
+            })}
+          </div>
+        )}
+        {!isSearchingPlaces && !livePlaces.length && !livePlacesError && (
+          <p className="live-search-meta">Enter a city or landmark in the search field above, then choose “Search live places”.</p>
+        )}
+        <p className="live-search-footnote">A zero-result search means no matching mapped features were returned, not that the place does not exist. Always confirm opening hours, access and pilgrimage rules with the venue.</p>
+      </section>
+
       <div className="card-grid">
         {places.length ? (
           places.map((temple) => <PlaceCard key={temple.id} place={temple} />)
@@ -498,7 +670,7 @@ function Explore({ query, setQuery, type, setType, places, rentalType, setRental
           <div className="empty-card grid-span-all">
             <Search size={28} />
             <h2>No demo places match</h2>
-            <p>Try a broader search. Live discovery will be added behind a provider boundary.</p>
+            <p>Try a broader search, or use the live map search above.</p>
           </div>
         )}
       </div>
@@ -626,8 +798,10 @@ function PlanView({ plan, estimatedBudget, isPlanning, from, to, travellers, day
             <div className="status-grid">
               <div className="status-card">
                 <span className="eyebrow">Live route</span>
-                <h3>{plan.context.route.distanceKm} km</h3>
-                <p>Driving distance · {plan.context.route.durationMinutes} min · {plan.context.route.provider}</p>
+                <h3>{Number.isFinite(plan.context.route.distanceKm) ? `${plan.context.route.distanceKm} km` : "Unavailable"}</h3>
+                <p>{Number.isFinite(plan.context.route.distanceKm) && Number.isFinite(plan.context.route.durationMinutes)
+                  ? `Driving distance · ${plan.context.route.durationMinutes} min · ${plan.context.route.provider}`
+                  : (plan.context.route.message || "A driving route could not be verified.")}</p>
               </div>
               <div className="status-card">
                 <span className="eyebrow">Live weather</span>
@@ -660,6 +834,23 @@ function PlanView({ plan, estimatedBudget, isPlanning, from, to, travellers, day
               </div>
             </div>
           )}
+
+          <div className="booking-handoff-card">
+            <div>
+              <span className="eyebrow">Booking handoffs</span>
+              <h2>Continue your trip research</h2>
+              <p>These links open external search/booking sites. TripMate has not checked their fares, inventory, schedules or availability, and no booking is made here.</p>
+            </div>
+            <div className="travel-link-grid">
+              {buildTravelSearchLinks(plan.source, plan.destination).map((item) => (
+                <a className="travel-link" href={item.url} target="_blank" rel="noreferrer noopener" key={item.id}>
+                  <span>{item.label}</span>
+                  <small>{item.provider}</small>
+                  <b>Open site ↗</b>
+                </a>
+              ))}
+            </div>
+          </div>
 
           <div className="plan-grid">
             <div className="timeline">
@@ -733,13 +924,14 @@ function PlanView({ plan, estimatedBudget, isPlanning, from, to, travellers, day
   );
 }
 
-function TripsView({ guest, trips, onLogin, onOpenTrip, onRemoveTrip }) {
+function TripsView({ guest, trips, syncNotice, onLogin, onOpenTrip, onRemoveTrip }) {
   return (
     <section className="page-section">
       <div className="page-header">
         <span className="eyebrow">My Trips</span>
         <h1>Your travel workspace</h1>
-        <p>Guest trips are stored locally in this browser. Sign in later to sync trips across devices.</p>
+        <p>{guest ? "Guest trips stay in this browser. Sign in to save new plans and sync them across devices." : "Your account trips are stored in Supabase and protected by row-level security."}</p>
+        {syncNotice && <div className="sync-notice" role="status">{syncNotice}</div>}
       </div>
 
       {trips.length > 0 ? (
@@ -750,11 +942,13 @@ function TripsView({ guest, trips, onLogin, onOpenTrip, onRemoveTrip }) {
                 <StatusBadge status={trip.dataStatus} />
                 <h3>{trip.source} → {trip.destination}</h3>
                 <p>{trip.travellers} traveller{trip.travellers === 1 ? "" : "s"} · {trip.days} days</p>
-                <span>₹{trip.budget?.total?.toLocaleString() ?? "—"} demo budget</span>
+                <span>{trip.budget?.status === "DEMO" && Number.isFinite(trip.budget?.total)
+                    ? `₹${trip.budget.total.toLocaleString()} illustrative demo estimate`
+                    : (Number.isFinite(trip.budget?.total) ? `₹${trip.budget.total.toLocaleString()} saved budget` : "Booking budget unavailable")}</span>
               </div>
               <div className="saved-trip-actions">
                 <button className="outline-button" onClick={() => onOpenTrip(trip)}>Open</button>
-                <button className="text-button danger-text" onClick={() => onRemoveTrip(trip.id)}>Remove</button>
+                <button className="text-button danger-text" onClick={() => onRemoveTrip(trip)}>Remove</button>
               </div>
             </article>
           ))}
@@ -771,7 +965,7 @@ function TripsView({ guest, trips, onLogin, onOpenTrip, onRemoveTrip }) {
         </div>
       )}
 
-      {!guest && <div className="empty-card"><h2>Account sync is next</h2><p>Supabase auth and persistent trip sync will plug into this same trip model.</p></div>}
+      {!guest && <div className="sync-summary"><ShieldCheck size={18} /><span>Account sync enabled. New live trip records and their source context are stored with your account.</span></div>}
     </section>
   );
 }
@@ -788,15 +982,71 @@ function DemoSubmissionNotice({ title, text }) {
   );
 }
 
-function AuthModal({ mode, setMode, onClose, onGuest }) {
-  const [submitted, setSubmitted] = useState(false);
+function AuthModal({ mode, setMode, onClose, onGuest, configured, user, onSignOut, onAuthSuccess }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
-  function submitAuth(event) {
+  async function submitAuth(event) {
     event.preventDefault();
-    if (!email.trim() || !password.trim()) return;
-    setSubmitted(true);
+    setError("");
+    setNotice("");
+    if (!supabase || !configured) {
+      setError("Cloud authentication is not configured yet. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your local .env file.");
+      return;
+    }
+    setPending(true);
+    try {
+      if (mode === "signup") {
+        const { data, error: authError } = await supabase.auth.signUp({
+          email: email.trim(),
+          password,
+          options: {
+            emailRedirectTo: window.location.origin,
+            data: { full_name: email.trim().split("@")[0] },
+          },
+        });
+        if (authError) throw authError;
+        if (data?.session) {
+          onAuthSuccess();
+        } else {
+          setNotice("Account request accepted. Check your email for the Supabase confirmation link, then return here to log in.");
+        }
+      } else {
+        const { error: authError } = await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
+        if (authError) throw authError;
+        onAuthSuccess();
+      }
+    } catch (authError) {
+      setError(authError instanceof Error ? authError.message : "Authentication failed. Check your details and Supabase settings.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function signInWithGoogle() {
+    setError("");
+    setNotice("");
+    if (!supabase || !configured) {
+      setError("Configure Supabase first, then enable Google in Authentication → Providers.");
+      return;
+    }
+    setPending(true);
+    try {
+      const { error: authError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: window.location.origin },
+      });
+      if (authError) throw authError;
+    } catch (authError) {
+      setError(authError instanceof Error ? authError.message : "Google sign-in could not be started.");
+      setPending(false);
+    }
   }
 
   return (
@@ -809,37 +1059,33 @@ function AuthModal({ mode, setMode, onClose, onGuest }) {
         <div className="auth-head">
           <span className="brand-mark">T</span>
           <span className="eyebrow">TripMate AI</span>
-          <h2 id="auth-title">{mode === "login" ? "Welcome back" : "Create your account"}</h2>
-          <p>
-            {mode === "login"
-              ? "Continue your travel planning."
-              : "Save trips and sync them across devices."}
-          </p>
+          <h2 id="auth-title">{user ? "Your account" : mode === "login" ? "Welcome back" : "Create your account"}</h2>
+          <p>{user ? user.email : mode === "login" ? "Sign in to sync saved trips across devices." : "Create an account to keep your trips in sync."}</p>
         </div>
 
-        {submitted ? (
+        {!configured && !user && (
+          <div className="auth-config-note">
+            <b>Guest mode is ready.</b>
+            <p>To enable real accounts, add your Supabase project URL and publishable/anon key to <code>.env</code>. Never put a service-role key in frontend code.</p>
+          </div>
+        )}
+
+        {user ? (
           <div className="success-card">
             <Check size={25} />
-            <h3>Authentication UI is ready</h3>
-            <p>
-              The form is intentionally a prototype until Supabase Auth is connected.
-              No fake account or provider session is created here.
-            </p>
-            <button className="primary-button" onClick={onGuest}>
-              Continue as guest
-            </button>
+            <h3>Signed in</h3>
+            <p>Your new trips can be saved to your Supabase project. Existing cloud trips load from your account when sync is available.</p>
+            {error && <p className="inline-error" role="alert">{error}</p>}
+            <button className="primary-button" type="button" onClick={onSignOut} disabled={pending}>Sign out</button>
+            <button className="guest-button" type="button" onClick={onClose}>Close</button>
           </div>
         ) : (
           <form onSubmit={submitAuth}>
-            <button
-              className="google-button"
-              type="button"
-              onClick={() => setSubmitted(true)}
-            >
-              Continue with Google
+            <button className="google-button" type="button" onClick={signInWithGoogle} disabled={!configured || pending}>
+              {pending ? "Please wait…" : "Continue with Google"}
             </button>
 
-            <div className="divider"><span>or</span></div>
+            <div className="divider"><span>or use email</span></div>
 
             <label>
               Email
@@ -850,6 +1096,7 @@ function AuthModal({ mode, setMode, onClose, onGuest }) {
                 placeholder="you@example.com"
                 autoComplete="email"
                 required
+                maxLength={254}
               />
             </label>
 
@@ -859,15 +1106,19 @@ function AuthModal({ mode, setMode, onClose, onGuest }) {
                 type="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                placeholder="••••••••"
+                placeholder="At least 8 characters"
                 autoComplete={mode === "login" ? "current-password" : "new-password"}
                 required
-                minLength="6"
+                minLength={8}
+                maxLength={128}
               />
             </label>
 
-            <button className="primary-button" type="submit">
-              {mode === "login" ? "Login" : "Create account"}
+            {error && <p className="inline-error" role="alert">{error}</p>}
+            {notice && <div className="auth-success-note" role="status">{notice}</div>}
+
+            <button className="primary-button" type="submit" disabled={!configured || pending}>
+              {pending ? "Please wait…" : mode === "login" ? "Login" : "Create account"}
             </button>
 
             <button className="guest-button" type="button" onClick={onGuest}>
@@ -879,7 +1130,8 @@ function AuthModal({ mode, setMode, onClose, onGuest }) {
               <button
                 type="button"
                 onClick={() => {
-                  setSubmitted(false);
+                  setError("");
+                  setNotice("");
                   setMode(mode === "login" ? "signup" : "login");
                 }}
               >
