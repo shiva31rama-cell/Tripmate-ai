@@ -29,4 +29,17 @@ export async function searchMapPlaces({ query, category = "places", signal }) {
   });
 }
 
+export async function searchLocalGuide({ latitude, longitude, radiusMeters = 1000, signal }) {
+  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 ||
+      !Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+    throw new Error("A valid location is required to search nearby places.");
+  }
+  return request("/api/local-guide", {
+    method: "POST",
+    signal,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ latitude, longitude, radiusMeters }),
+  });
+}
+
 export { API_BASE_URL };
