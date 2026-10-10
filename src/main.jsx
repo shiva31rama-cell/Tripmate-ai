@@ -757,6 +757,7 @@ function Explore({
           </div>
         </div>
 
+        <div className="rental-results-panel">
         <div className="rental-search-actions">
           <button className="primary-button small" type="button" onClick={onLiveRentalSearch} disabled={isSearchingRentals || query.trim().length < 3}>
             <Search size={16} /> {isSearchingRentals ? "Searching rentals…" : "Find mapped rental businesses"}
@@ -804,6 +805,7 @@ function Explore({
               )}
             </div>
           )}
+        </div>
         </div>
       </div>
 
