@@ -20,12 +20,12 @@ export async function buildLiveTrip({ from, to, travellers, days, signal }) {
   });
 }
 
-export async function searchMapPlaces({ query, signal }) {
+export async function searchMapPlaces({ query, category = "places", signal }) {
   return request("/api/places/search", {
     method: "POST",
     signal,
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query }),
+    body: JSON.stringify({ query, category }),
   });
 }
 
