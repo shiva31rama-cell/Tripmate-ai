@@ -2,7 +2,7 @@ import unittest
 
 from pydantic import ValidationError
 
-from server import PlaceSearchRequest, TripRequest, _cache, cached, put_cache
+from server import PlaceSearchRequest, TripRequest, _cache, cached, put_cache, safe_http_url
 
 
 class TripRequestTests(unittest.TestCase):
@@ -38,6 +38,13 @@ class TripRequestTests(unittest.TestCase):
         self.assertEqual(PlaceSearchRequest(query="Kadapa", category="rentals").category, "rentals")
         with self.assertRaises(ValidationError):
             PlaceSearchRequest(query="Kadapa", category="booking")
+
+    def test_external_websites_only_allow_http_schemes(self):
+        self.assertEqual(safe_http_url("example.com"), "https://example.com")
+        self.assertEqual(safe_http_url("https://example.com/path"), "https://example.com/path")
+        self.assertIsNone(safe_http_url("javascript:alert(1)"))
+        self.assertIsNone(safe_http_url("data:text/html,hello"))
+        self.assertIsNone(safe_http_url(""))
 
     def test_cache_round_trip(self):
         key = "test:cache-round-trip"
