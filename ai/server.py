@@ -2,7 +2,8 @@ import asyncio
 import json
 import os
 import time
-from typing import Any
+from typing import Any, Literal
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import FastAPI, HTTPException
@@ -50,6 +51,22 @@ class AIRequest(BaseModel):
 
 class PlaceSearchRequest(BaseModel):
     query: str = Field(min_length=3, max_length=120)
+    category: Literal["places", "rentals"] = "places"
+
+
+def safe_http_url(value: Any) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    candidate = value.strip()
+    if candidate.startswith("//"):
+        candidate = "https:" + candidate
+    parsed = urlparse(candidate)
+    if not parsed.scheme:
+        candidate = "https://" + candidate
+        parsed = urlparse(candidate)
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname:
+        return None
+    return candidate
 
 
 def cached(key: str) -> Any | None:
@@ -196,7 +213,7 @@ out center tags;
             "category": tags.get("tourism") or tags.get("amenity") or "place",
             "latitude": element.get("lat", center.get("lat")),
             "longitude": element.get("lon", center.get("lon")),
-            "website": tags.get("website"),
+            "website": safe_http_url(tags.get("website")),
             "phone": tags.get("phone"),
             "religion": tags.get("religion"),
             "denomination": tags.get("denomination"),
@@ -209,6 +226,67 @@ out center tags;
             "checkedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         })
         if len(results) >= result_limit:
+            break
+    return put_cache(key, results)
+
+
+async def nearby_rental_providers(client: httpx.AsyncClient, destination: dict[str, Any]) -> list[dict[str, Any]]:
+    lat, lon = destination["latitude"], destination["longitude"]
+    key = f"rentals:{round(lat, 3)}:{round(lon, 3)}"
+    hit = cached(key)
+    if hit:
+        return hit
+
+    query = f"""
+[out:json][timeout:20];
+(
+  nwr(around:15000,{lat},{lon})[amenity=car_rental];
+  nwr(around:15000,{lat},{lon})[amenity=bicycle_rental];
+  nwr(around:15000,{lat},{lon})[amenity=motorcycle_rental];
+  nwr(around:15000,{lat},{lon})[shop=bicycle];
+);
+out center tags;
+"""
+    response = await client.post(
+        OVERPASS_URL, data={"data": query},
+        headers={"User-Agent": APP_USER_AGENT, "Accept": "application/json"},
+        timeout=30,
+    )
+    response.raise_for_status()
+    results = []
+    seen = set()
+    for element in response.json().get("elements", []):
+        tags = element.get("tags", {})
+        name = tags.get("name") or tags.get("operator") or tags.get("brand")
+        if not name:
+            continue
+        identifier = f"{element.get('type')}:{element.get('id')}"
+        if identifier in seen:
+            continue
+        seen.add(identifier)
+        center = element.get("center", {})
+        address_parts = [
+            tags.get("addr:housenumber"),
+            tags.get("addr:street"),
+            tags.get("addr:suburb"),
+            tags.get("addr:city") or tags.get("addr:town"),
+        ]
+        results.append({
+            "id": identifier,
+            "name": name,
+            "category": tags.get("amenity") or tags.get("shop") or "rental provider",
+            "latitude": element.get("lat", center.get("lat")),
+            "longitude": element.get("lon", center.get("lon")),
+            "address": ", ".join(part for part in address_parts if part),
+            "website": safe_http_url(tags.get("website")),
+            "phone": tags.get("phone") or tags.get("contact:phone"),
+            "provider": "OpenStreetMap Overpass",
+            "status": "LIVE",
+            "sourceUrl": "https://www.openstreetmap.org/",
+            "osmUrl": f"https://www.openstreetmap.org/{element.get('type')}/{element.get('id')}",
+            "checkedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        })
+        if len(results) >= 40:
             break
     return put_cache(key, results)
 
@@ -311,7 +389,10 @@ async def search_places(request: PlaceSearchRequest) -> dict[str, Any]:
     async with httpx.AsyncClient() as client:
         try:
             location = await geocode(client, query)
-            places = await nearby_places(client, location, radius_m=15000, result_limit=30)
+            if request.category == "rentals":
+                places = await nearby_rental_providers(client, location)
+            else:
+                places = await nearby_places(client, location, radius_m=15000, result_limit=30)
         except HTTPException:
             raise
         except (httpx.HTTPError, json.JSONDecodeError, KeyError, ValueError, TypeError, IndexError) as exc:
@@ -323,6 +404,7 @@ async def search_places(request: PlaceSearchRequest) -> dict[str, Any]:
         "location": location,
         "places": places,
         "provider": "OpenStreetMap Overpass",
+        "category": request.category,
         "sourceUrl": "https://www.openstreetmap.org/",
         "checkedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "message": "Mapped results only; missing places do not imply a place does not exist. Opening hours and access rules must be confirmed with the venue.",
