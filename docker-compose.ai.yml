@@ -49,6 +49,7 @@ services:
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080}
       APP_USER_AGENT: ${APP_USER_AGENT:-TripMateAI/0.2 (+https://github.com/shiva31rama-cell/Tripmate-ai)}
+      GOOGLE_PLACES_API_KEY: ${GOOGLE_PLACES_API_KEY:-}
       CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS:-900}
       NOMINATIM_MIN_INTERVAL_SECONDS: ${NOMINATIM_MIN_INTERVAL_SECONDS:-1.1}
     depends_on:
