@@ -46,7 +46,7 @@ const COPY = {
     radius: "వెతకాల్సిన పరిధి",
     filters: { all: "అన్నీ", food: "ఆహారం", essentials: "అవసరాలు", culture: "సంస్కృతి & ప్రార్థనా స్థలాలు", transport: "రవాణా", sights: "చూడదగిన ప్రదేశాలు", other: "ఇతరాలు" },
     emptyTitle: "దగ్గరలోని ఎంపికలను చూడండి", emptyBody: "దగ్గరలోని భోజన స్థలాలు, ప్రజా రవాణా స్టాప్‌లు, అవసరమైన సేవలు, ప్రార్థనా స్థలాలు, సందర్శన ప్రదేశాలను వెతకండి.",
-    results: "మ్యాప్‌లోని దగ్గరి ప్రదేశాలు", updated: "తనిఖీ చేసిన సమయం", live: "లైవ్ మ్యాప్ సమాచారం", estimated: "అంచనా",
+    results: "మ్యాప్‌లోని దగ్గరి ప్రదేశాలు", updated: "తనిఖీ చేసిన సమయం", live: "లైవ్ మ్యాప్ సమాచారం", estimated: "అంచనా", unavailableStatus: "మ్యాప్ సేవ అందుబాటులో లేదు",
     straightLine: "సూటి దూరం", about: "సుమారు", minutesWalk: "నిమిషాల నడక", walking: "నడక మార్గం",
     transit: "ప్రజా రవాణా", viewMap: "మ్యాప్ మూలాన్ని చూడండి",
     noResults: "ఈ పరిధిలో మ్యాప్‌లోని ప్రదేశాలు లభించలేదు. నిజంగా ప్రదేశాలు లేవని దీని అర్థం కాదు; మ్యాప్ సమాచారం అసంపూర్ణంగా ఉండవచ్చు.",
@@ -81,7 +81,7 @@ const COPY = {
     radius: "खोज का दायरा",
     filters: { all: "सभी", food: "खाना", essentials: "ज़रूरी सेवाएँ", culture: "संस्कृति और पूजा स्थल", transport: "परिवहन", sights: "घूमने की जगहें", other: "अन्य" },
     emptyTitle: "पास के विकल्प देखें", emptyBody: "पास के भोजनालय, सार्वजनिक परिवहन स्टॉप, ज़रूरी सेवाएँ, पूजा स्थल और आकर्षण खोजें।",
-    results: "मैप पर मिली आस-पास की जगहें", updated: "जाँच का समय", live: "लाइव मैप डेटा", estimated: "अनुमानित",
+    results: "मैप पर मिली आस-पास की जगहें", updated: "जाँच का समय", live: "लाइव मैप डेटा", estimated: "अनुमानित", unavailableStatus: "मैप सेवा उपलब्ध नहीं",
     straightLine: "सीधी दूरी", about: "लगभग", minutesWalk: "मिनट पैदल", walking: "पैदल रास्ता",
     transit: "सार्वजनिक परिवहन", viewMap: "मैप स्रोत खोलें",
     noResults: "इस दायरे में मैप पर कोई जगह नहीं मिली। इसका मतलब यह नहीं कि वहाँ जगहें नहीं हैं; मैप की जानकारी अधूरी हो सकती है।",
@@ -264,7 +264,7 @@ export default function LocalGuide({ language = "en" }) {
         <section className="local-guide-results" aria-live="polite">
           <div className="local-guide-results-heading">
             <div>
-              <span className="eyebrow">{providerStatus === "LIVE" ? t.live : t.estimated}</span>
+              <span className="eyebrow">{providerStatus === "LIVE" ? t.live : t.unavailableStatus}</span>
               <h2>{filteredPlaces.length} {t.results}</h2>
               {checkedAt && <p>{t.updated}: {new Date(checkedAt).toLocaleString(locale)}</p>}
             </div>
@@ -282,7 +282,7 @@ export default function LocalGuide({ language = "en" }) {
             ))}
           </div>
 
-          {filteredPlaces.length === 0 && <div className="empty-card local-guide-empty"><h3>{t.noResults}</h3></div>}
+          {filteredPlaces.length === 0 && <div className="empty-card local-guide-empty"><h3>{providerStatus === "LIVE" ? t.noResults : t.providerError}</h3></div>}
 
           {filteredPlaces.length > 0 && (
             <div className="local-guide-grid">
@@ -290,7 +290,7 @@ export default function LocalGuide({ language = "en" }) {
                 <article className="local-guide-place" key={place.id || (place.name + "-" + place.latitude + "-" + place.longitude)}>
                   <div className="local-guide-place-top">
                     <span className="local-guide-live">{t.live}</span>
-                    <span className="local-guide-distance">{distanceLabel(Number(place.distanceMeters), t)}</span>
+                    <span className="local-guide-distance">{t.estimated} · {distanceLabel(Number(place.distanceMeters), t)}</span>
                   </div>
                   <h3>{place.name}</h3>
                   <p className="local-guide-place-category">{t.filters[place.guideCategory] || t.filters.other}</p>
@@ -312,7 +312,7 @@ export default function LocalGuide({ language = "en" }) {
             </div>
           )}
           <p className="local-guide-transport-note">{t.transportNote}</p>
-          {message && <p className="local-guide-provider-message">{message}</p>}
+          {message && language === "en" && <p className="local-guide-provider-message">{message}</p>}
         </section>
       )}
 
