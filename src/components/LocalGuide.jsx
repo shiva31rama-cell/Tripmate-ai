@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
-import { Bus, Footprints, LocateFixed, MapPin, Navigation, RefreshCw, ShieldCheck } from "lucide-react";
-import { searchLocalGuide } from "../services/liveTravel";
+import { Bus, Footprints, LocateFixed, MapPin, MessageCircle, Navigation, RefreshCw, Send, ShieldCheck } from "lucide-react";
+import { askLocalGuide, searchLocalGuide } from "../services/liveTravel";
 
 const COPY = {
   en: {
@@ -25,6 +25,18 @@ const COPY = {
     transportNote: "This opens Google Maps. Transit choices, timings and fares appear only when its local data supports them; TripMate has not verified a live fare or departure.",
     attribution: "Nearby names and categories come from OpenStreetMap. Coverage, pedestrian access and opening details can be incomplete. Confirm the route and local conditions before setting off.",
     estimateNote: "Walking time is an estimate based on distance and an assumed detour; the real route can be longer.",
+    verifyVenue: "confirm with the venue",
+    askTitle: "Ask your local guide",
+    askIntro: "Ask about nearby options, practical walking choices or what to check next. Search nearby first for place-aware answers.",
+    travellingAs: "Travelling",
+    solo: "Solo traveller",
+    twoPeople: "Two people",
+    questionPlaceholder: "e.g. Is there a nearby place to eat, and how can I walk there?",
+    askButton: "Ask TripMate",
+    asking: "Thinking…",
+    answerTitle: "TripMate's suggestion",
+    answerNote: "AI guidance is not a live transport timetable or a verified venue update.",
+    askError: "The AI guide is unavailable right now. The nearby map results still work; please try again later.",
   },
   te: {
     eyebrow: "మీ ప్రయాణానికి స్థానిక సహాయకుడు", title: "కొత్త ఊరా? దగ్గర నుంచే మొదలుపెట్టండి.",
@@ -48,6 +60,18 @@ const COPY = {
     transportNote: "ఇది Google Mapsను తెరుస్తుంది. స్థానిక సమాచారం ఉన్నప్పుడే రవాణా ఎంపికలు, సమయాలు, ఛార్జీలు కనిపిస్తాయి; TripMate ప్రత్యక్ష ఛార్జీ లేదా బయలుదేరే సమయాన్ని ధృవీకరించలేదు.",
     attribution: "ప్రదేశాల పేర్లు, వర్గాలు OpenStreetMap నుంచి వస్తాయి. సమాచారం, నడక దారి, తెరిచి ఉన్న సమయాలు అసంపూర్ణంగా ఉండవచ్చు. బయలుదేరే ముందు మార్గం, స్థానిక పరిస్థితులు నిర్ధారించండి.",
     estimateNote: "నడక సమయం దూరం, ఊహించిన అదనపు మార్గంపై ఆధారమైన అంచనా మాత్రమే; నిజమైన దారి ఎక్కువ కావచ్చు.",
+    verifyVenue: "స్థలంతో నిర్ధారించండి",
+    askTitle: "మీ స్థానిక గైడ్‌ను అడగండి",
+    askIntro: "దగ్గరలోని ఎంపికలు, నడక మార్గాలు లేదా తర్వాత ఏమి తనిఖీ చేయాలో అడగండి. ప్రదేశాల ఆధారంగా సమాధానం పొందాలంటే ముందుగా దగ్గరలో వెతకండి.",
+    travellingAs: "ప్రయాణికులు",
+    solo: "ఒక్కరే ప్రయాణం",
+    twoPeople: "ఇద్దరు",
+    questionPlaceholder: "ఉదా: దగ్గరలో భోజనం చేసే చోటు ఉందా? అక్కడికి ఎలా నడిచి వెళ్లాలి?",
+    askButton: "TripMateను అడగండి",
+    asking: "ఆలోచిస్తోంది…",
+    answerTitle: "TripMate సూచన",
+    answerNote: "AI సూచన ప్రత్యక్ష రవాణా సమయ పట్టిక లేదా ధృవీకరించిన ప్రదేశ సమాచారం కాదు.",
+    askError: "AI గైడ్ ప్రస్తుతం అందుబాటులో లేదు. దగ్గరి మ్యాప్ ఫలితాలు పనిచేస్తూనే ఉంటాయి; తర్వాత మళ్లీ ప్రయత్నించండి.",
   },
   hi: {
     eyebrow: "आपका स्थानीय यात्रा साथी", title: "नया शहर? आस-पास से शुरू करें।",
@@ -71,6 +95,18 @@ const COPY = {
     transportNote: "यह Google Maps खोलेगा। सार्वजनिक परिवहन, समय और किराया तभी दिखेंगे जब उस क्षेत्र का डेटा उपलब्ध होगा; TripMate ने लाइव किराया या प्रस्थान समय की पुष्टि नहीं की है।",
     attribution: "जगहों के नाम और श्रेणियाँ OpenStreetMap से हैं। कवरेज, पैदल पहुँच और खुलने के समय की जानकारी अधूरी हो सकती है। निकलने से पहले रास्ता और स्थानीय स्थिति जाँच लें।",
     estimateNote: "पैदल समय दूरी और अनुमानित अतिरिक्त रास्ते पर आधारित है; वास्तविक रास्ता लंबा हो सकता है।",
+    verifyVenue: "स्थल से पुष्टि करें",
+    askTitle: "अपने स्थानीय गाइड से पूछें",
+    askIntro: "पास के विकल्पों, पैदल जाने के तरीके या आगे क्या जाँचना है, इसके बारे में पूछें। जगहों पर आधारित जवाब के लिए पहले पास की जगहें खोजें।",
+    travellingAs: "यात्रा में",
+    solo: "अकेले यात्री",
+    twoPeople: "दो लोग",
+    questionPlaceholder: "उदाहरण: पास में खाने की जगह है? वहाँ पैदल कैसे पहुँचूँ?",
+    askButton: "TripMate से पूछें",
+    asking: "सोच रहा है…",
+    answerTitle: "TripMate का सुझाव",
+    answerNote: "AI की सलाह लाइव परिवहन समय-सारणी या सत्यापित स्थल अपडेट नहीं है।",
+    askError: "AI गाइड अभी उपलब्ध नहीं है। पास के मैप परिणाम फिर भी काम करते हैं; बाद में दोबारा कोशिश करें।",
   },
 };
 
@@ -108,6 +144,12 @@ export default function LocalGuide({ language = "en" }) {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [question, setQuestion] = useState("");
+  const [travellers, setTravellers] = useState("1");
+  const [answer, setAnswer] = useState("");
+  const [answerLanguage, setAnswerLanguage] = useState("en");
+  const [isAsking, setIsAsking] = useState(false);
+  const [askError, setAskError] = useState("");
 
   const filteredPlaces = useMemo(() => {
     const filtered = places.filter((place) => filter === "all" || place.guideCategory === filter);
@@ -151,6 +193,30 @@ export default function LocalGuide({ language = "en" }) {
       setHasSearched(true);
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function submitQuestion(event) {
+    event.preventDefault();
+    const trimmedQuestion = question.trim();
+    if (trimmedQuestion.length < 3) return;
+    setIsAsking(true);
+    setAskError("");
+    setAnswer("");
+    try {
+      const result = await askLocalGuide({
+        question: trimmedQuestion,
+        language,
+        travellers: Number(travellers),
+        places: places.slice(0, 30),
+      });
+      setAnswer(result.answer || "");
+      setAnswerLanguage(language);
+      if (!result.answer) setAskError(t.askError);
+    } catch {
+      setAskError(t.askError);
+    } finally {
+      setIsAsking(false);
     }
   }
 
@@ -231,7 +297,7 @@ export default function LocalGuide({ language = "en" }) {
                   {Number.isFinite(Number(place.estimatedWalkMinutes)) && (
                     <p className="local-guide-walk-estimate"><Footprints size={15} /> {t.about} {place.estimatedWalkMinutes} {t.minutesWalk}</p>
                   )}
-                  {place.openingHours && <small className="local-guide-hours">{place.openingHours} · verify with the venue</small>}
+                  {place.openingHours && <small className="local-guide-hours">{place.openingHours} · {t.verifyVenue}</small>}
                   <div className="local-guide-place-actions">
                     {coordinates && (
                       <>
@@ -249,6 +315,49 @@ export default function LocalGuide({ language = "en" }) {
           {message && <p className="local-guide-provider-message">{message}</p>}
         </section>
       )}
+
+      <section className="local-guide-ask">
+        <div className="local-guide-ask-heading">
+          <span className="local-guide-pin"><MessageCircle size={21} /></span>
+          <div>
+            <span className="eyebrow">{t.askTitle}</span>
+            <p>{t.askIntro}</p>
+          </div>
+        </div>
+        <form className="local-guide-ask-form" onSubmit={submitQuestion}>
+          <label className="guide-travellers">
+            <span>{t.travellingAs}</span>
+            <select value={travellers} onChange={(event) => setTravellers(event.target.value)}>
+              <option value="1">{t.solo}</option>
+              <option value="2">{t.twoPeople}</option>
+            </select>
+          </label>
+          <label className="local-guide-question-label">
+            <span>{t.askTitle}</span>
+            <textarea
+              value={question}
+              onChange={(event) => setQuestion(event.target.value)}
+              placeholder={t.questionPlaceholder}
+              rows={3}
+              maxLength={500}
+              required
+              minLength={3}
+            />
+          </label>
+          <button className="primary-button" type="submit" disabled={isAsking || question.trim().length < 3}>
+            {isAsking ? <RefreshCw size={17} className="guide-spin" /> : <Send size={17} />}
+            {isAsking ? t.asking : t.askButton}
+          </button>
+        </form>
+        {askError && <p className="inline-error" role="alert">{askError}</p>}
+        {answer && answerLanguage === language && (
+          <article className="local-guide-answer" aria-live="polite">
+            <h3>{t.answerTitle}</h3>
+            <p>{answer}</p>
+            <small>{t.answerNote}</small>
+          </article>
+        )}
+      </section>
 
       <div className="local-guide-footer">
         <ShieldCheck size={18} />
