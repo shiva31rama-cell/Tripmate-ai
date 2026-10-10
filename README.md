@@ -85,6 +85,19 @@ Production build:
 npm run build
 ```
 
+## First-time visitor Local Guide
+
+The Local Guide is designed for solo travellers and two-person trips in unfamiliar Indian towns and cities. It supports Telugu, Hindi and English, and includes:
+
+- One-tap, user-initiated nearby search using browser location permission
+- Nearby mapped food, essentials, public transport stops, worship places and attractions
+- Distance-based walk-first advice, explicitly labelled as an estimate rather than a pedestrian route guarantee
+- Google Maps links for walking directions and public-transport exploration
+- A practical phrasebook for asking about walking distance, bus stops, fares and entrances in Telugu, Hindi and English
+- Optional local-guide questions grounded in the nearby map results when available
+
+The guide never claims a live bus timetable, verified fare, safe/accessible footpath or venue opening status unless a connected source can verify it. Distances are straight-line estimates; the actual walking route can be longer. Location is requested only after the user taps the nearby-search button and is not added to saved trip records by this feature.
+
 ## Repository rule
 
 Development is intentionally being performed directly on the **`main` branch**, as requested for this project. No feature/development branch is created by the current implementation workflow.
