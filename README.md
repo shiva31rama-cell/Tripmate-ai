@@ -298,3 +298,13 @@ Map and directions references:
 - Overpass API: https://overpass-api.de/
 - Google Maps URLs and walking/transit handoffs: https://developers.google.com/maps/documentation/urls/get-started
 
+
+
+### Walking-first mobility suggestions
+
+The Local Guide now adds a multilingual mobility hint to each nearby result:
+- Up to 500 m straight-line distance: **check walking first**.
+- 501–1,200 m: **compare walking and public transport**.
+- Beyond 1,200 m: **compare public transport**.
+- These are decision prompts, not claims that a pedestrian path, sidewalk, bus, fare or service is available. The UI explicitly asks travellers to inspect the real route and local conditions; it never invents a fare or tells people to take an unsafe shortcut.
+- Labels follow the selected English, Telugu or Hindi guide language.
