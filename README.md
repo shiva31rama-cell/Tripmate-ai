@@ -341,12 +341,12 @@ This tracker separates repository work that can be verified by CI from work that
 | 4. Accounts and cloud sync | **Code implemented; owner setup pending** | Apply Supabase migrations 001–003, configure Auth redirect URLs and optional Google OAuth, then test sign-up/recovery/save/import/delete against the actual project. |
 | 5. Commercial transport/stays/rentals | **Provider integration pending** | Requires authorized APIs/agreements for fares, live schedules, seat/room/vehicle inventory, taxes, refund terms and booking confirmation. Until then, use outbound search links and show prices as unavailable. |
 | 6. Official pilgrimage and local knowledge | **Ingestion/review pending** | Select official tourism/temple sources, map each claim to source URL and checked time, and add review/update processes for schedules, entry rules and public facilities. Demo cards must stay labelled DEMO. |
-| 7. Operations and production hardening | **Deployment-specific work pending** | Configure a supported/self-hosted routing service at scale, shared rate limiting/cache if horizontally scaled, provider-failure alerts, structured logs, retention policy, and production security headers/CORS. |
+| 7. Operations and production hardening | **Partially implemented; deployment work pending** | Baseline browser security headers are configured in Nginx; geocoding and pedestrian route requests are throttled per API process. Still configure a supported/self-hosted routing service at scale, shared rate limiting/cache when horizontally scaled, provider-failure alerts, structured logs, retention policy, and production CORS/TLS at the deployment edge. |
 | 8. End-to-end launch validation | **Pending real-environment run** | Verify browser location permissions, Telugu/Hindi/English flows, auth and cloud persistence, provider outages, mobile layouts, deployment health and data freshness on the deployed app. |
 
 ### Pedestrian routing configuration
 
-VALHALLA_URL controls the pedestrian-routing API. The default is the public Valhalla instance documented by its OpenAPI definition (https://valhalla1.openstreetmap.de). The Local Guide makes route requests only when a traveller presses **Calculate walking route** and caches successful results for the backend cache TTL. Public routing services may throttle or become unavailable; configure an operated/self-hosted Valhalla instance or suitable hosted provider before a wider launch. The current result shows route distance/time and source, but is not a live safety assessment and does not guarantee pedestrian access, sidewalk condition or closures.
+VALHALLA_URL controls the pedestrian-routing API. The default is the public Valhalla instance documented by its OpenAPI definition (https://valhalla1.openstreetmap.de). The Local Guide makes route requests only when a traveller presses **Calculate walking route** and caches successful results for the backend cache TTL. Uncached Valhalla requests are also serialized and throttled per API process by VALHALLA_MIN_INTERVAL_SECONDS (default 1.1 seconds). Public routing services may throttle or become unavailable; configure an operated/self-hosted Valhalla instance or suitable hosted provider before a wider launch. The current result shows route distance/time and source, but is not a live safety assessment and does not guarantee pedestrian access, sidewalk condition or closures.
 
 Official routing references:
 - Valhalla route API: https://github.com/valhalla/valhalla/blob/master/docs/docs/api/route/api-reference.md
@@ -361,3 +361,8 @@ Official routing references:
 4. Add versioned official-source ingestion for temple, tourism and civic essentials, with freshness checks and an editorial review process.
 5. Connect authorized commercial travel APIs only when terms and credentials are available; exercise booking flows in provider sandboxes before production.
 6. Run the full end-to-end launch checklist and add monitoring/alerts before calling the project production-ready.
+
+
+### Browser security headers
+
+The Nginx frontend sends X-Content-Type-Options, X-Frame-Options, Referrer-Policy and a Permissions-Policy limiting geolocation to the app origin and disabling camera/microphone access. The app intentionally asks for browser location only after the traveller initiates Nearby Search. HTTPS/TLS and any HSTS policy must be configured at the production reverse proxy/load balancer that terminates TLS; this development container serves HTTP internally.
