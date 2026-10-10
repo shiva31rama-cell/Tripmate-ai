@@ -59,6 +59,11 @@ function App() {
   const [livePlacesCheckedAt, setLivePlacesCheckedAt] = useState("");
   const [livePlacesError, setLivePlacesError] = useState("");
   const [isSearchingPlaces, setIsSearchingPlaces] = useState(false);
+  const [liveRentalProviders, setLiveRentalProviders] = useState([]);
+  const [liveRentalLocation, setLiveRentalLocation] = useState("");
+  const [liveRentalCheckedAt, setLiveRentalCheckedAt] = useState("");
+  const [liveRentalError, setLiveRentalError] = useState("");
+  const [isSearchingRentals, setIsSearchingRentals] = useState(false);
   const [isImportingGuestTrips, setIsImportingGuestTrips] = useState(false);
   const [isPlanning, setIsPlanning] = useState(false);
 
@@ -133,16 +138,6 @@ function App() {
     });
   }, [exploreQuery, exploreType]);
 
-  const filteredRentals = useMemo(
-    () =>
-      demoRentals.filter(
-        (rental) =>
-          rentalType === "all" ||
-          rental.vehicleType.toLowerCase() === rentalType
-      ),
-    [rentalType]
-  );
-
   async function searchExplorePlaces() {
     const query = exploreQuery.trim();
     if (query.length < 3) {
@@ -162,6 +157,28 @@ function App() {
       setLivePlacesError(error instanceof Error ? error.message : "Live map search is temporarily unavailable.");
     } finally {
       setIsSearchingPlaces(false);
+    }
+  }
+
+  async function searchLiveRentalProviders() {
+    const query = exploreQuery.trim();
+    if (query.length < 3) {
+      setLiveRentalError("Enter a city or landmark with at least three characters first.");
+      return;
+    }
+    setIsSearchingRentals(true);
+    setLiveRentalError("");
+    try {
+      const result = await searchMapPlaces({ query, category: "rentals" });
+      setLiveRentalProviders(result.places || []);
+      setLiveRentalLocation(result.location?.name || query);
+      setLiveRentalCheckedAt(result.checkedAt || "");
+    } catch (error) {
+      setLiveRentalProviders([]);
+      setLiveRentalLocation("");
+      setLiveRentalError(error instanceof Error ? error.message : "Rental business search is temporarily unavailable.");
+    } finally {
+      setIsSearchingRentals(false);
     }
   }
 
@@ -425,13 +442,18 @@ function App() {
             places={filteredTemples}
             rentalType={rentalType}
             setRentalType={setRentalType}
-            rentals={filteredRentals}
             livePlaces={livePlaces}
             livePlacesLocation={livePlacesLocation}
             livePlacesCheckedAt={livePlacesCheckedAt}
             livePlacesError={livePlacesError}
             isSearchingPlaces={isSearchingPlaces}
             onLiveSearch={searchExplorePlaces}
+            liveRentalProviders={liveRentalProviders}
+            liveRentalLocation={liveRentalLocation}
+            liveRentalCheckedAt={liveRentalCheckedAt}
+            liveRentalError={liveRentalError}
+            isSearchingRentals={isSearchingRentals}
+            onLiveRentalSearch={searchLiveRentalProviders}
           />
         )}
 
@@ -605,10 +627,19 @@ function PlaceCard({ place }) {
 }
 
 function Explore({
-  query, setQuery, type, setType, places, rentalType, setRentalType, rentals,
+  query, setQuery, type, setType, places, rentalType, setRentalType,
   livePlaces, livePlacesLocation, livePlacesCheckedAt, livePlacesError, isSearchingPlaces, onLiveSearch,
+  liveRentalProviders, liveRentalLocation, liveRentalCheckedAt, liveRentalError, isSearchingRentals, onLiveRentalSearch,
 }) {
   const availableTypes = [...new Set(demoTemples.map((place) => place.type))];
+  const visibleRentalProviders = liveRentalProviders.filter((provider) => {
+    const category = String(provider.category || "").toLowerCase();
+    if (rentalType === "all") return true;
+    if (rentalType === "car") return category.includes("car");
+    if (rentalType === "bike") return category.includes("bicycle") || category.includes("bike");
+    if (rentalType === "scooter") return category.includes("motorcycle") || category.includes("scooter");
+    return true;
+  });
 
   return (
     <section className="page-section">
@@ -726,26 +757,53 @@ function Explore({
           </div>
         </div>
 
+        <div className="rental-search-actions">
+          <button className="primary-button small" type="button" onClick={onLiveRentalSearch} disabled={isSearchingRentals || query.trim().length < 3}>
+            <Search size={16} /> {isSearchingRentals ? "Searching rentals…" : "Find mapped rental businesses"}
+          </button>
+          <span className="live-search-meta">Uses OpenStreetMap business tags; it does not return rental prices or availability.</span>
+        </div>
+        {liveRentalError && <p className="inline-error" role="alert">{liveRentalError}</p>}
+        {liveRentalLocation && (
+          <p className="live-search-meta">
+            Rental businesses near {liveRentalLocation}
+            {liveRentalCheckedAt ? ` · checked ${new Date(liveRentalCheckedAt).toLocaleString()}` : ""}
+          </p>
+        )}
         <div className="rental-list">
-          {rentals.map((rental) => (
-            <div className="rental-row" key={rental.id}>
-              <div className="rental-icon"><CarFront size={20} /></div>
-              <div className="rental-info">
-                <b>{rental.model}</b>
-                <span>
-                  {rental.distanceKm} km away · Deposit ₹{rental.deposit.toLocaleString()} ·{" "}
-                  {STATUS_LABELS[rental.status]}
-                </span>
-              </div>
-              <strong>₹{rental.dailyPrice.toLocaleString()}/day</strong>
-              <button
-                className="outline-button"
-                onClick={() => window.alert("This is a demo rental listing. Connect a provider before enabling booking.")}
-              >
-                Details
-              </button>
+          {isSearchingRentals ? (
+            <p role="status">Looking for mapped rental businesses…</p>
+          ) : visibleRentalProviders.length ? (
+            visibleRentalProviders.map((provider) => {
+              const lat = Number(provider.latitude), lon = Number(provider.longitude);
+              const mapUrl = Number.isFinite(lat) && Number.isFinite(lon)
+                ? `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=17/${lat}/${lon}`
+                : "https://www.openstreetmap.org/";
+              return (
+                <div className="rental-row live-rental-row" key={provider.id}>
+                  <div className="rental-icon"><CarFront size={20} /></div>
+                  <div className="rental-info">
+                    <b>{provider.name}</b>
+                    <span>{String(provider.category || "rental provider").replaceAll("_", " ")} · LIVE mapped business · prices and vehicle stock unavailable</span>
+                    {provider.address && <small>{provider.address}</small>}
+                    {provider.phone && <small>Phone listed in OpenStreetMap: {provider.phone}</small>}
+                  </div>
+                  <div className="rental-provider-actions">
+                    <a href={provider.osmUrl || mapUrl} target="_blank" rel="noreferrer noopener">Map source ↗</a>
+                    {provider.website && <a href={provider.website} target="_blank" rel="noreferrer noopener">Website ↗</a>}
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <div className="rental-empty-state">
+              <p>{liveRentalError ? "Search could not be completed." : "No rental search run yet, or no mapped rental businesses matched this location and category."}</p>
+              <p>OSM coverage is incomplete. Ask the provider about daily rates, deposit, fuel, insurance, licence requirements, pickup and cancellation before agreeing to rent.</p>
+              {query.trim().length >= 3 && (
+                <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`bike car rental in ${query.trim()}`)}`} target="_blank" rel="noreferrer noopener">Search other local rental listings ↗</a>
+              )}
             </div>
-          ))}
+          )}
         </div>
       </div>
 
