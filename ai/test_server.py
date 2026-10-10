@@ -2,7 +2,7 @@ import unittest
 
 from pydantic import ValidationError
 
-from server import TripRequest, _cache, cached, put_cache
+from server import PlaceSearchRequest, TripRequest, _cache, cached, put_cache
 
 
 class TripRequestTests(unittest.TestCase):
@@ -28,6 +28,11 @@ class TripRequestTests(unittest.TestCase):
     def test_rejects_empty_destination(self):
         with self.assertRaises(ValidationError):
             TripRequest(**{"from": "Kadapa", "to": ""})
+
+    def test_live_place_search_requires_a_useful_query(self):
+        with self.assertRaises(ValidationError):
+            PlaceSearchRequest(query="ab")
+        self.assertEqual(PlaceSearchRequest(query="Kadapa").query, "Kadapa")
 
     def test_cache_round_trip(self):
         key = "test:cache-round-trip"
