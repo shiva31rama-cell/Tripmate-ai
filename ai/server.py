@@ -150,17 +150,25 @@ async def route(client: httpx.AsyncClient, source: dict[str, Any], destination: 
     return put_cache(key, result)
 
 
-async def nearby_places(client: httpx.AsyncClient, destination: dict[str, Any]) -> list[dict[str, Any]]:
+async def nearby_places(
+    client: httpx.AsyncClient,
+    destination: dict[str, Any],
+    *,
+    radius_m: int = 7000,
+    result_limit: int = 20,
+) -> list[dict[str, Any]]:
     lat, lon = destination["latitude"], destination["longitude"]
-    key = f"places:{round(lat, 3)}:{round(lon, 3)}"
+    radius_m = max(1000, min(25000, int(radius_m)))
+    result_limit = max(1, min(40, int(result_limit)))
+    key = f"places:{round(lat, 3)}:{round(lon, 3)}:{radius_m}:{result_limit}"
     hit = cached(key)
     if hit:
         return hit
     query = f"""
 [out:json][timeout:20];
 (
-  nwr(around:7000,{lat},{lon})[tourism];
-  nwr(around:7000,{lat},{lon})[amenity=place_of_worship];
+  nwr(around:{radius_m},{lat},{lon})[tourism];
+  nwr(around:{radius_m},{lat},{lon})[amenity=place_of_worship];
 );
 out center tags;
 """
@@ -190,12 +198,17 @@ out center tags;
             "longitude": element.get("lon", center.get("lon")),
             "website": tags.get("website"),
             "phone": tags.get("phone"),
+            "religion": tags.get("religion"),
+            "denomination": tags.get("denomination"),
+            "openingHours": tags.get("opening_hours"),
+            "wikidata": tags.get("wikidata"),
+            "osmUrl": f"https://www.openstreetmap.org/{element.get('type')}/{element.get('id')}",
             "provider": "OpenStreetMap Overpass",
             "status": "LIVE",
             "sourceUrl": "https://www.openstreetmap.org/",
             "checkedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         })
-        if len(results) >= 20:
+        if len(results) >= result_limit:
             break
     return put_cache(key, results)
 
@@ -298,7 +311,7 @@ async def search_places(request: PlaceSearchRequest) -> dict[str, Any]:
     async with httpx.AsyncClient() as client:
         try:
             location = await geocode(client, query)
-            places = await nearby_places(client, location)
+            places = await nearby_places(client, location, radius_m=15000, result_limit=30)
         except HTTPException:
             raise
         except (httpx.HTTPError, json.JSONDecodeError, KeyError, ValueError, TypeError, IndexError) as exc:
