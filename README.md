@@ -96,7 +96,7 @@ The Local Guide is designed for solo travellers and two-person trips in unfamili
 - A practical phrasebook for asking about walking distance, bus stops, fares and entrances in Telugu, Hindi and English
 - Optional local-guide questions grounded in the nearby map results when available
 
-The guide never claims a live bus timetable, verified fare, safe/accessible footpath or venue opening status unless a connected source can verify it. Distances are straight-line estimates; the actual walking route can be longer. Location is requested only after the user taps the nearby-search button and is not added to saved trip records by this feature.
+The guide never claims a live bus timetable, verified fare, safe/accessible footpath or venue opening status unless a connected source can verify it. Straight-line distance remains an estimate. Requested pedestrian route distance and duration are returned by Valhalla, but do not guarantee a sidewalk, safe crossing, unrestricted access or current road conditions. Location is requested only after the user taps nearby search and is not added to saved trip records by this feature.
 
 ## Repository rule
 
@@ -298,8 +298,9 @@ The Local Guide view is designed for first-time visitors who arrive somewhere un
 
 - The visitor explicitly taps Find places near me before the browser requests device location. The coordinates are used for that search and are not added to saved trip records.
 - A user-selectable 500 m, 1 km, 2 km or 5 km radius searches OpenStreetMap for mapped food places, essential services, worship/cultural sites, attractions and public-transport stops.
-- Results are sorted by approximate straight-line distance. A separately labelled walking-time estimate uses a simple 25% route-detour assumption and 4 km/h walking speed; it is not a calculated pedestrian route.
-- Every place offers a Google Maps handoff for walking directions and a public-transport directions search. Those links are not proof that a route, bus, fare or departure time is available; the user must check the returned route and local conditions.
+- Results are initially sorted by approximate straight-line distance. A separately labelled estimate uses a simple 25% route-detour assumption and 4 km/h walking speed only until a route is requested.
+- Each coordinate-backed place has a **Calculate walking route** action. It requests a pedestrian-costed route from the configurable Valhalla routing API, then shows the returned route distance and approximate duration only when the provider returns valid route data. If routing is unavailable, the UI explains that and keeps the Google Maps walking-directions handoff as an alternative.
+- Every place also offers a Google Maps handoff for walking directions and a public-transport directions search. These links are not proof that a route, bus, fare or departure time is available; users must check the returned route and local conditions.
 - The in-guide interface, recommendations and safety notes support English, Telugu and Hindi. Place names remain as returned by the map provider.
 - The Local Guide question box sends a short question, selected language, group size (solo or two people), and nearby result list to the configured local Ollama model. Its prompt forbids invented fares, timetables, venue status and unsafe shortcuts. If Ollama is unavailable, the nearby map search remains usable.
 - If the map provider fails or has no mapped result, the UI says so instead of inventing a nearby shop or transport service. OpenStreetMap results can be incomplete and should not replace local safety judgement.
@@ -325,3 +326,38 @@ The Local Guide now adds a multilingual mobility hint to each nearby result:
 - Beyond 1,200 m: **compare public transport**.
 - These are decision prompts, not claims that a pedestrian path, sidewalk, bus, fare or service is available. The UI explicitly asks travellers to inspect the real route and local conditions; it never invents a fare or tells people to take an unsafe shortcut.
 - Labels follow the selected English, Telugu or Hindi guide language.
+
+
+
+## Phase tracker and remaining launch work (updated 2026-10-10)
+
+This tracker separates repository work that can be verified by CI from work that needs real provider accounts, local government data agreements or deployment credentials. “Implemented” does not mean third-party credentials or production uptime have been provisioned.
+
+| Phase | Status | Scope and exit condition |
+|---|---|---|
+| 1. Core app and data-trust rules | **Implemented / CI-tested** | Responsive app, guest trips, clear demo/live/unavailable status, input validation and source metadata. |
+| 2. Open-data travel foundation | **Implemented / CI-tested** | FastAPI service, OSM discovery/geocoding, OSRM driving route, Open-Meteo weather, local Ollama generation, provider caching and Docker stack. Public provider rate limits still apply. |
+| 3. First-visit Local Guide | **Implemented / CI-tested** | English, Telugu and Hindi UI, user-triggered location, nearby POI categories, mobility hints, phrasebook, quick prompts, and on-demand Valhalla pedestrian route distance/time with Google Maps fallbacks. Live transit departures/fare comparison are not yet integrated. |
+| 4. Accounts and cloud sync | **Code implemented; owner setup pending** | Apply Supabase migrations 001–003, configure Auth redirect URLs and optional Google OAuth, then test sign-up/recovery/save/import/delete against the actual project. |
+| 5. Commercial transport/stays/rentals | **Provider integration pending** | Requires authorized APIs/agreements for fares, live schedules, seat/room/vehicle inventory, taxes, refund terms and booking confirmation. Until then, use outbound search links and show prices as unavailable. |
+| 6. Official pilgrimage and local knowledge | **Ingestion/review pending** | Select official tourism/temple sources, map each claim to source URL and checked time, and add review/update processes for schedules, entry rules and public facilities. Demo cards must stay labelled DEMO. |
+| 7. Operations and production hardening | **Deployment-specific work pending** | Configure a supported/self-hosted routing service at scale, shared rate limiting/cache if horizontally scaled, provider-failure alerts, structured logs, retention policy, and production security headers/CORS. |
+| 8. End-to-end launch validation | **Pending real-environment run** | Verify browser location permissions, Telugu/Hindi/English flows, auth and cloud persistence, provider outages, mobile layouts, deployment health and data freshness on the deployed app. |
+
+### Pedestrian routing configuration
+
+VALHALLA_URL controls the pedestrian-routing API. The default is the public Valhalla instance documented by its OpenAPI definition (https://valhalla1.openstreetmap.de). The Local Guide makes route requests only when a traveller presses **Calculate walking route** and caches successful results for the backend cache TTL. Public routing services may throttle or become unavailable; configure an operated/self-hosted Valhalla instance or suitable hosted provider before a wider launch. The current result shows route distance/time and source, but is not a live safety assessment and does not guarantee pedestrian access, sidewalk condition or closures.
+
+Official routing references:
+- Valhalla route API: https://github.com/valhalla/valhalla/blob/master/docs/docs/api/route/api-reference.md
+- Valhalla API schema and documented server: https://github.com/valhalla/valhalla/blob/master/docs/docs/api/openapi.yaml
+- OpenTripPlanner for a later transit phase: https://docs.opentripplanner.org/en/latest/apis/ (requires locally managed transit feeds/data or a suitable provider; no live Indian fare/feed is assumed by TripMate).
+
+### Next concrete milestones
+
+1. Apply Supabase migrations and test auth/cloud sync in the owner's project.
+2. Deploy/operate a reliable pedestrian-routing provider for the expected traffic and validate routes in several Indian towns.
+3. Select city/agency GTFS or an authorized transit provider, then implement public-transport route/time comparisons without guessing fares.
+4. Add versioned official-source ingestion for temple, tourism and civic essentials, with freshness checks and an editorial review process.
+5. Connect authorized commercial travel APIs only when terms and credentials are available; exercise booking flows in provider sandboxes before production.
+6. Run the full end-to-end launch checklist and add monitoring/alerts before calling the project production-ready.
