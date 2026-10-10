@@ -15,6 +15,10 @@ class TripRequestTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             TripRequest(**{"from": "Kadapa", "to": "Tirupati", "travellers": 31, "days": 3})
 
+    def test_rejects_zero_days(self):
+        with self.assertRaises(ValidationError):
+            TripRequest(**{"from": "Kadapa", "to": "Tirupati", "travellers": 2, "days": 0})
+
     def test_rejects_overlong_location_input(self):
         with self.assertRaises(ValidationError):
             TripRequest(**{"from": "A" * 201, "to": "Tirupati"})
