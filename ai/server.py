@@ -335,12 +335,14 @@ def ground_ai_plan(result: dict[str, Any], context: dict[str, Any]) -> dict[str,
         place for place in raw_places
         if isinstance(place, dict) and isinstance(place.get("name"), str) and place["name"].strip()
     ] if isinstance(raw_places, list) else []
-    places_by_name = {place["name"].strip().casefold(): place for place in places}
+    places_per_day = min(3, max(1, (len(places) + requested_days - 1) // requested_days)) if places else 0
     used_names: set[str] = set()
     raw_days = result.get("days") if isinstance(result.get("days"), list) else []
     grounded_days = []
 
     for index in range(requested_days):
+        assigned_places = places[index * places_per_day:(index + 1) * places_per_day]
+        places_by_name = {place["name"].strip().casefold(): place for place in assigned_places}
         raw_day = raw_days[index] if index < len(raw_days) and isinstance(raw_days[index], dict) else {}
         candidates = raw_day.get("activities")
         if not isinstance(candidates, list):
@@ -378,7 +380,7 @@ def ground_ai_plan(result: dict[str, Any], context: dict[str, Any]) -> dict[str,
         # When the model fails to select verifiable named places, fill that day
         # from the provider list rather than inventing venues or opening times.
         if len(chosen) < 3:
-            for place in places[index * 3:(index + 1) * 3]:
+            for place in assigned_places:
                 name = place["name"].strip()
                 if name.casefold() in used_names:
                     continue
