@@ -9,7 +9,7 @@ The repository now contains a clean, responsive React + Vite foundation with:
 - Home dashboard and AI trip-planner form
 - Source → destination validation, including same-location rejection
 - Guest mode with **Skip for now / Continue as guest**
-- Login / Sign-up UI with Google sign-in entry point
+- Real Supabase email/password sign-up and login, Google OAuth entry point, and password reset/recovery flow when configured
 - Responsive mobile bottom navigation
 - Explore destination and temple cards
 - Local bike/scooter/car rental discovery UI
@@ -254,7 +254,7 @@ The frontend now has real Supabase Auth flows and account-scoped trip persistenc
 3. In the Supabase SQL Editor, run migrations in order:
    `001_tripmate_foundation.sql`, `002_tripmate_rls_policies.sql`, then `003_auth_and_trip_sync.sql`.
 4. In Supabase **Authentication → URL Configuration**, set your local app as the Site URL (usually `http://localhost:5173`) and add your deployed/Codespaces app URL to the redirect allow-list.
-5. Email/password auth works through Supabase Auth. To use Google, enable the Google provider in Supabase **Authentication → Providers** and configure its OAuth credentials/redirects there.
+5. Email/password sign-up and login, password reset email requests, password recovery, and Google OAuth are wired through Supabase Auth. To use Google, enable the Google provider in Supabase **Authentication → Providers** and configure its OAuth credentials/redirects there. For password reset, ensure your local/deployed origin is in Supabase **Authentication → URL Configuration → Redirect URLs** and that the email template links back to the app.
 6. Restart the Vite server after changing `.env`. Sign in and create a trip; the app saves trip fields, itinerary JSON and provider context to the authenticated user's row. RLS restricts rows to their owner.
 
 If migrations have not been applied, auth can still work but trip sync will show a clear database error. Guest trips stay in local browser storage and are not uploaded until cloud persistence is explicitly used by a signed-in session.
