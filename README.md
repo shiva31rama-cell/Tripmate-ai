@@ -277,3 +277,23 @@ Official setup and API reference: https://developers.google.com/maps/documentati
 ### Current verified boundary
 
 The frontend and backend support live geocoding, OSRM driving distance/duration, mapped nearby places and current weather when the public sources are reachable. Local model itinerary generation requires Ollama and the configured model. Saved trip synchronization requires a configured Supabase project and all three migrations. The GitHub Actions workflow tests the application and backend, but does not provision third-party accounts or validate live provider uptime.
+
+
+### Walking-first local guide (English, Telugu, Hindi)
+
+The Local Guide view is designed for first-time visitors who arrive somewhere unfamiliar and do not want to pay for a ride before checking nearby options.
+
+- The visitor explicitly taps Find places near me before the browser requests device location. The coordinates are used for that search and are not added to saved trip records.
+- A user-selectable 500 m, 1 km, 2 km or 5 km radius searches OpenStreetMap for mapped food places, essential services, worship/cultural sites, attractions and public-transport stops.
+- Results are sorted by approximate straight-line distance. A separately labelled walking-time estimate uses a simple 25% route-detour assumption and 4 km/h walking speed; it is not a calculated pedestrian route.
+- Every place offers a Google Maps handoff for walking directions and a public-transport directions search. Those links are not proof that a route, bus, fare or departure time is available; the user must check the returned route and local conditions.
+- The in-guide interface, recommendations and safety notes support English, Telugu and Hindi. Place names remain as returned by the map provider.
+- If the map provider fails or has no mapped result, the UI says so instead of inventing a nearby shop or transport service. OpenStreetMap results can be incomplete and should not replace local safety judgement.
+
+The API endpoint is POST /api/local-guide with latitude, longitude and radiusMeters. It validates coordinate bounds, caps search radius and result count, caches map results briefly in process memory, and returns source/provider metadata. Browser location requires user permission and a secure browser context (localhost or HTTPS).
+
+Map and directions references:
+- OpenStreetMap: https://www.openstreetmap.org/
+- Overpass API: https://overpass-api.de/
+- Google Maps URLs and walking/transit handoffs: https://developers.google.com/maps/documentation/urls/get-started
+
