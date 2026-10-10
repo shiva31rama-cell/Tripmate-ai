@@ -17,6 +17,7 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
 NOMINATIM_URL = os.getenv("NOMINATIM_URL", "https://nominatim.openstreetmap.org").rstrip("/")
 OSRM_URL = os.getenv("OSRM_URL", "https://router.project-osrm.org").rstrip("/")
 VALHALLA_URL = os.getenv("VALHALLA_URL", "https://valhalla1.openstreetmap.de").rstrip("/")
+VALHALLA_MIN_INTERVAL_SECONDS = max(1.0, float(os.getenv("VALHALLA_MIN_INTERVAL_SECONDS", "1.1")))
 OVERPASS_URL = os.getenv("OVERPASS_URL", "https://overpass-api.de/api/interpreter")
 OPEN_METEO_URL = os.getenv("OPEN_METEO_URL", "https://api.open-meteo.com/v1/forecast").rstrip("/")
 GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY", "").strip()
@@ -36,6 +37,8 @@ CACHE_TTL_SECONDS = max(30, int(os.getenv("CACHE_TTL_SECONDS", "900")))
 NOMINATIM_MIN_INTERVAL_SECONDS = max(1.0, float(os.getenv("NOMINATIM_MIN_INTERVAL_SECONDS", "1.1")))
 _nominatim_lock = asyncio.Lock()
 _last_nominatim_request = 0.0
+_valhalla_lock = asyncio.Lock()
+_last_valhalla_request = 0.0
 
 
 class TripRequest(BaseModel):
@@ -333,20 +336,28 @@ async def pedestrian_route(
     if hit is not None:
         return hit
 
-    response = await client.post(
-        f"{VALHALLA_URL}/route",
-        json={
-            "locations": [
-                {"lat": origin["latitude"], "lon": origin["longitude"]},
-                {"lat": destination["latitude"], "lon": destination["longitude"]},
-            ],
-            "costing": "pedestrian",
-            "units": "kilometers",
-            "directions_options": {"units": "kilometers"},
-        },
-        headers={"User-Agent": APP_USER_AGENT, "Accept": "application/json"},
-        timeout=20,
-    )
+    global _last_valhalla_request
+    async with _valhalla_lock:
+        wait = VALHALLA_MIN_INTERVAL_SECONDS - (time.monotonic() - _last_valhalla_request)
+        if wait > 0:
+            await asyncio.sleep(wait)
+        try:
+            response = await client.post(
+                f"{VALHALLA_URL}/route",
+                json={
+                    "locations": [
+                        {"lat": origin["latitude"], "lon": origin["longitude"]},
+                        {"lat": destination["latitude"], "lon": destination["longitude"]},
+                    ],
+                    "costing": "pedestrian",
+                    "units": "kilometers",
+                    "directions_options": {"units": "kilometers"},
+                },
+                headers={"User-Agent": APP_USER_AGENT, "Accept": "application/json"},
+                timeout=20,
+            )
+        finally:
+            _last_valhalla_request = time.monotonic()
     response.raise_for_status()
     try:
         data = response.json()
