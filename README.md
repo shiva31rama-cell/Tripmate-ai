@@ -300,6 +300,10 @@ Map and directions references:
 
 
 
+### First-visit quick prompts (English, Telugu, Hindi)
+
+The Local Guide now includes one-tap question starters in all three supported languages for finding public-transport stops, nearby food, walk-versus-ride decisions, and essential services such as pharmacies or ATMs. Selecting a prompt fills the question box; the traveller can review or edit it before asking the AI guide. Ride advice also reminds visitors to ask the total fare or confirm the meter before starting. This is practical guidance, not a claim about local fare rules or a guarantee that a service is available.
+
 ### Walking-first mobility suggestions
 
 The Local Guide now adds a multilingual mobility hint to each nearby result:
