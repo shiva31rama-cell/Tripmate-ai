@@ -16,6 +16,7 @@ OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip(
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
 NOMINATIM_URL = os.getenv("NOMINATIM_URL", "https://nominatim.openstreetmap.org").rstrip("/")
 OSRM_URL = os.getenv("OSRM_URL", "https://router.project-osrm.org").rstrip("/")
+VALHALLA_URL = os.getenv("VALHALLA_URL", "https://valhalla1.openstreetmap.de").rstrip("/")
 OVERPASS_URL = os.getenv("OVERPASS_URL", "https://overpass-api.de/api/interpreter")
 OPEN_METEO_URL = os.getenv("OPEN_METEO_URL", "https://api.open-meteo.com/v1/forecast").rstrip("/")
 GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY", "").strip()
@@ -51,6 +52,13 @@ class LocalGuideRequest(BaseModel):
     latitude: float = Field(ge=-90, le=90)
     longitude: float = Field(ge=-180, le=180)
     radiusMeters: int = Field(default=1000, ge=300, le=5000)
+
+
+class LocalWalkingRouteRequest(BaseModel):
+    originLatitude: float = Field(ge=-90, le=90)
+    originLongitude: float = Field(ge=-180, le=180)
+    destinationLatitude: float = Field(ge=-90, le=90)
+    destinationLongitude: float = Field(ge=-180, le=180)
 
 
 class LocalGuideQuestion(BaseModel):
@@ -309,6 +317,59 @@ async def google_places_search(
             "checkedAt": checked_at,
         })
     return results
+
+
+async def pedestrian_route(
+    client: httpx.AsyncClient,
+    origin: dict[str, float],
+    destination: dict[str, float],
+) -> dict[str, Any]:
+    """Calculate a pedestrian route on a pedestrian-capable OSM routing graph."""
+    key = (
+        f"walking-route:{round(origin['latitude'], 5)},{round(origin['longitude'], 5)}:"
+        f"{round(destination['latitude'], 5)},{round(destination['longitude'], 5)}"
+    )
+    hit = cached(key)
+    if hit is not None:
+        return hit
+
+    response = await client.post(
+        f"{VALHALLA_URL}/route",
+        json={
+            "locations": [
+                {"lat": origin["latitude"], "lon": origin["longitude"]},
+                {"lat": destination["latitude"], "lon": destination["longitude"]},
+            ],
+            "costing": "pedestrian",
+            "units": "kilometers",
+            "directions_options": {"units": "kilometers"},
+        },
+        headers={"User-Agent": APP_USER_AGENT, "Accept": "application/json"},
+        timeout=20,
+    )
+    response.raise_for_status()
+    try:
+        data = response.json()
+        summary = data["trip"]["summary"]
+        distance_km = float(summary["length"])
+        duration_seconds = float(summary["time"])
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError, AttributeError) as exc:
+        raise HTTPException(status_code=502, detail="Pedestrian routing provider returned an invalid route.") from exc
+
+    if not (0 < distance_km <= 200 and 0 < duration_seconds <= 86400):
+        raise HTTPException(status_code=502, detail="Pedestrian routing provider returned an invalid distance or duration.")
+
+    result = {
+        "status": "LIVE",
+        "provider": "Valhalla pedestrian routing",
+        "sourceUrl": "https://github.com/valhalla/valhalla",
+        "distanceMeters": round(distance_km * 1000),
+        "distanceKm": round(distance_km, 2),
+        "durationMinutes": max(1, int((duration_seconds + 59) // 60)),
+        "checkedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "message": "Route distance and duration were returned by a pedestrian routing engine. Still inspect crossings, lighting, access restrictions and local conditions before walking.",
+    }
+    return put_cache(key, result)
 
 
 def haversine_distance_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -749,7 +810,7 @@ async def create_ai_plan(context: dict[str, Any]) -> dict[str, Any]:
 
 @app.get("/health")
 async def health() -> dict[str, Any]:
-    providers = ["OpenStreetMap Nominatim", "OSRM", "Overpass", "Open-Meteo", "Ollama"]
+    providers = ["OpenStreetMap Nominatim", "OSRM", "Overpass", "Open-Meteo", "Ollama", "Valhalla pedestrian routing"]
     if GOOGLE_PLACES_API_KEY:
         providers.append("Google Places API (configured fallback)")
     return {"status": "ok", "model": OLLAMA_MODEL, "providers": providers}
@@ -772,6 +833,32 @@ async def ask_local_guide(request: LocalGuideQuestion) -> dict[str, Any]:
         "checkedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "message": "AI advice is grounded in the supplied nearby map list; live fares, schedules, venue status and pedestrian routes are not independently verified.",
     }
+
+
+@app.post("/api/local-guide/walking-route")
+async def local_guide_walking_route(request: LocalWalkingRouteRequest) -> dict[str, Any]:
+    """Return an on-demand pedestrian route; never substitute straight-line distance as a route."""
+    origin = {"latitude": request.originLatitude, "longitude": request.originLongitude}
+    destination = {"latitude": request.destinationLatitude, "longitude": request.destinationLongitude}
+    if haversine_distance_m(
+        origin["latitude"], origin["longitude"],
+        destination["latitude"], destination["longitude"],
+    ) < 1:
+        raise HTTPException(status_code=400, detail="Choose a destination at least one metre away.")
+
+    checked_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    try:
+        async with httpx.AsyncClient() as client:
+            return await pedestrian_route(client, origin, destination)
+    except (httpx.HTTPError, HTTPException, json.JSONDecodeError, KeyError, ValueError, TypeError, IndexError) as exc:
+        return {
+            "status": "UNAVAILABLE",
+            "provider": "Valhalla pedestrian routing",
+            "sourceUrl": "https://github.com/valhalla/valhalla",
+            "route": None,
+            "checkedAt": checked_at,
+            "message": "A pedestrian route could not be verified right now. Open the map directions to check other available routes; distance-based walking time is only an estimate.",
+        }
 
 
 @app.post("/api/local-guide")
