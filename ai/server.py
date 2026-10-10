@@ -18,6 +18,8 @@ NOMINATIM_URL = os.getenv("NOMINATIM_URL", "https://nominatim.openstreetmap.org"
 OSRM_URL = os.getenv("OSRM_URL", "https://router.project-osrm.org").rstrip("/")
 OVERPASS_URL = os.getenv("OVERPASS_URL", "https://overpass-api.de/api/interpreter")
 OPEN_METEO_URL = os.getenv("OPEN_METEO_URL", "https://api.open-meteo.com/v1/forecast").rstrip("/")
+GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY", "").strip()
+GOOGLE_PLACES_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText"
 APP_USER_AGENT = os.getenv("APP_USER_AGENT", "TripMateAI/0.2 (+https://github.com/shiva31rama-cell/Tripmate-ai)")
 
 app.add_middleware(
@@ -228,6 +230,72 @@ out center tags;
         if len(results) >= result_limit:
             break
     return put_cache(key, results)
+
+
+async def google_places_search(
+    client: httpx.AsyncClient,
+    location: dict[str, Any],
+    query: str,
+    *,
+    result_limit: int = 20,
+) -> list[dict[str, Any]]:
+    """Optional paid/credentialed fallback. The key is only read by the backend."""
+    if not GOOGLE_PLACES_API_KEY:
+        raise HTTPException(status_code=503, detail="Google Places fallback is not configured.")
+    response = await client.post(
+        GOOGLE_PLACES_SEARCH_URL,
+        json={
+            "textQuery": query,
+            "languageCode": "en",
+            "regionCode": "IN",
+            "pageSize": max(1, min(20, int(result_limit))),
+            "locationBias": {
+                "circle": {
+                    "center": {
+                        "latitude": location["latitude"],
+                        "longitude": location["longitude"],
+                    },
+                    "radius": 15000,
+                }
+            },
+        },
+        headers={
+            "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY,
+            "X-Goog-FieldMask": (
+                "places.id,places.displayName,places.location,places.primaryType,"
+                "places.websiteUri,places.nationalPhoneNumber,places.googleMapsUri,"
+                "places.regularOpeningHours.weekdayDescriptions"
+            ),
+            "Content-Type": "application/json",
+        },
+        timeout=20,
+    )
+    response.raise_for_status()
+    checked_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    results = []
+    for place in response.json().get("places", []):
+        name = place.get("displayName", {}).get("text")
+        point = place.get("location") or {}
+        if not name or point.get("latitude") is None or point.get("longitude") is None:
+            continue
+        results.append({
+            "id": f"google:{place.get('id', name)}",
+            "name": name,
+            "category": place.get("primaryType") or "place",
+            "latitude": point["latitude"],
+            "longitude": point["longitude"],
+            "website": safe_http_url(place.get("websiteUri")),
+            "phone": place.get("nationalPhoneNumber"),
+            "openingHours": " · ".join(
+                place.get("regularOpeningHours", {}).get("weekdayDescriptions", [])
+            ) or None,
+            "provider": "Google Places API",
+            "status": "LIVE",
+            "sourceUrl": place.get("googleMapsUri") or "https://developers.google.com/maps/documentation/places/web-service",
+            "osmUrl": place.get("googleMapsUri") or "https://www.google.com/maps",
+            "checkedAt": checked_at,
+        })
+    return results
 
 
 async def nearby_rental_providers(client: httpx.AsyncClient, destination: dict[str, Any]) -> list[dict[str, Any]]:
@@ -463,7 +531,10 @@ async def create_ai_plan(context: dict[str, Any]) -> dict[str, Any]:
 
 @app.get("/health")
 async def health() -> dict[str, Any]:
-    return {"status": "ok", "model": OLLAMA_MODEL, "providers": ["OpenStreetMap Nominatim", "OSRM", "Overpass", "Open-Meteo", "Ollama"]}
+    providers = ["OpenStreetMap Nominatim", "OSRM", "Overpass", "Open-Meteo", "Ollama"]
+    if GOOGLE_PLACES_API_KEY:
+        providers.append("Google Places API (configured fallback)")
+    return {"status": "ok", "model": OLLAMA_MODEL, "providers": providers}
 
 
 @app.post("/api/plan")
@@ -482,14 +553,27 @@ async def search_places(request: PlaceSearchRequest) -> dict[str, Any]:
     async with httpx.AsyncClient() as client:
         try:
             location = await geocode(client, query)
-            if request.category == "rentals":
-                places = await nearby_rental_providers(client, location)
-            else:
-                places = await nearby_places(client, location, radius_m=15000, result_limit=30)
         except HTTPException:
             raise
         except (httpx.HTTPError, json.JSONDecodeError, KeyError, ValueError, TypeError, IndexError) as exc:
-            raise HTTPException(status_code=503, detail="OpenStreetMap place search is temporarily unavailable. Please retry later.") from exc
+            raise HTTPException(status_code=503, detail="Location verification is temporarily unavailable. Please retry later.") from exc
+
+        try:
+            if request.category == "rentals":
+                places = await nearby_rental_providers(client, location)
+                fallback_query = f"car bicycle and motorcycle rental businesses near {query}"
+            else:
+                places = await nearby_places(client, location, radius_m=15000, result_limit=30)
+                fallback_query = f"tourist attractions and places of worship near {query}"
+        except (httpx.HTTPError, HTTPException, json.JSONDecodeError, KeyError, ValueError, TypeError, IndexError):
+            places = []
+
+        # Use Google Places only when explicitly configured and OSM returns no results.
+        if not places and GOOGLE_PLACES_API_KEY:
+            try:
+                places = await google_places_search(client, location, fallback_query, result_limit=30)
+            except (httpx.HTTPError, HTTPException, json.JSONDecodeError, KeyError, ValueError, TypeError):
+                places = []
 
     return {
         "status": "LIVE",
@@ -545,8 +629,17 @@ async def trip_context(request: TripRequest) -> dict[str, Any]:
             pass
         try:
             places = await nearby_places(client, destination)
-        except (httpx.HTTPError, HTTPException, KeyError, ValueError):
+        except (httpx.HTTPError, HTTPException, KeyError, ValueError, TypeError, IndexError):
             places = []
+        if not places and GOOGLE_PLACES_API_KEY:
+            try:
+                places = await google_places_search(
+                    client, destination,
+                    f"tourist attractions and places of worship near {destination_text}",
+                    result_limit=20,
+                )
+            except (httpx.HTTPError, HTTPException, json.JSONDecodeError, KeyError, ValueError, TypeError):
+                places = []
         try:
             weather_data = await weather(client, destination)
         except (httpx.HTTPError, HTTPException, KeyError, ValueError):
