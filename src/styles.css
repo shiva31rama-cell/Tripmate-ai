@@ -531,3 +531,79 @@ button:disabled { opacity: .65; cursor: wait; }
   outline: 3px solid var(--accent);
   outline-offset: 2px;
 }
+
+
+/* Practical phrasebook for first-time visitors and local-language assistance. */
+.local-guide-phrases {
+  margin-top: 28px;
+}
+.local-guide-phrases-heading {
+  max-width: 760px;
+  margin-bottom: 16px;
+}
+.local-guide-phrases-heading h2 {
+  font-size: clamp(24px, 3vw, 32px);
+  margin-top: 8px;
+}
+.local-guide-phrases-heading p {
+  color: var(--muted);
+  line-height: 1.65;
+  font-size: 13px;
+}
+.local-guide-phrases-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 13px;
+}
+.local-guide-phrase-card {
+  min-width: 0;
+  padding: 17px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.local-guide-phrase-card h3 {
+  margin: 0 0 14px;
+  font-size: 15px;
+  line-height: 1.45;
+}
+.local-guide-phrase-card p {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 12px;
+  line-height: 1.5;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.local-guide-phrase-card p span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .04em;
+}
+.local-guide-copy-phrase {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 36px;
+  margin-top: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--soft);
+  color: var(--accent-dark);
+  font-size: 11px;
+  font-weight: 800;
+}
+.local-guide-copy-phrase:hover {
+  border-color: var(--accent);
+}
+@media (max-width: 900px) {
+  .local-guide-phrases-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+  .local-guide-phrases-grid { grid-template-columns: 1fr; }
+  .local-guide-phrase-card { padding: 15px; }
+  .local-guide-copy-phrase { width: 100%; }
+}
