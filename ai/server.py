@@ -580,9 +580,11 @@ async def search_places(request: PlaceSearchRequest) -> dict[str, Any]:
         "query": query,
         "location": location,
         "places": places,
-        "provider": "OpenStreetMap Overpass",
+        "provider": places[0].get("provider", "OpenStreetMap Overpass") if places else (
+            "Google Places API" if GOOGLE_PLACES_API_KEY else "OpenStreetMap Overpass"
+        ),
         "category": request.category,
-        "sourceUrl": "https://www.openstreetmap.org/",
+        "sourceUrl": "https://developers.google.com/maps/documentation/places/web-service" if places and places[0].get("provider") == "Google Places API" else "https://www.openstreetmap.org/",
         "checkedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "message": "Mapped results only; missing places do not imply a place does not exist. Opening hours and access rules must be confirmed with the venue.",
     }
@@ -678,6 +680,11 @@ async def trip_context(request: TripRequest) -> dict[str, Any]:
             "https://project-osrm.org/",
             "https://overpass-api.de/",
             "https://open-meteo.com/",
+            *(
+                ["https://developers.google.com/maps/documentation/places/web-service"]
+                if any(place.get("provider") == "Google Places API" for place in places)
+                else []
+            ),
         ],
         "checkedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
