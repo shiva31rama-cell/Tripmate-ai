@@ -34,6 +34,11 @@ class TripRequestTests(unittest.TestCase):
             PlaceSearchRequest(query="ab")
         self.assertEqual(PlaceSearchRequest(query="Kadapa").query, "Kadapa")
 
+    def test_live_place_search_restricts_category(self):
+        self.assertEqual(PlaceSearchRequest(query="Kadapa", category="rentals").category, "rentals")
+        with self.assertRaises(ValidationError):
+            PlaceSearchRequest(query="Kadapa", category="booking")
+
     def test_cache_round_trip(self):
         key = "test:cache-round-trip"
         value = {"status": "LIVE", "name": "example"}
