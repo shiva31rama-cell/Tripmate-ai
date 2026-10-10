@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 import server
 from pydantic import ValidationError
 
-from server import PlaceSearchRequest, TripRequest, _cache, cached, ground_ai_plan, put_cache, safe_http_url
+from server import (LocalGuideRequest, PlaceSearchRequest, TripRequest, _cache, cached, classify_local_guide_place, ground_ai_plan, haversine_distance_m, nearby_local_guide, put_cache, safe_http_url)
 
 
 class GooglePlacesFallbackTests(unittest.IsolatedAsyncioTestCase):
@@ -59,6 +59,53 @@ class GooglePlacesFallbackTests(unittest.IsolatedAsyncioTestCase):
                 )
         finally:
             server.GOOGLE_PLACES_API_KEY = previous_key
+
+
+class LocalGuideTests(unittest.IsolatedAsyncioTestCase):
+    def test_validates_coordinates_and_radius(self):
+        LocalGuideRequest(latitude=14.47, longitude=78.82, radiusMeters=500)
+        with self.assertRaises(ValidationError):
+            LocalGuideRequest(latitude=91, longitude=78.82, radiusMeters=500)
+        with self.assertRaises(ValidationError):
+            LocalGuideRequest(latitude=14.47, longitude=78.82, radiusMeters=100)
+
+    def test_haversine_distance_uses_metres(self):
+        distance = haversine_distance_m(0, 0, 0.01, 0)
+        self.assertGreater(distance, 1100)
+        self.assertLess(distance, 1120)
+
+    def test_categorizes_transport_food_and_essentials(self):
+        self.assertEqual(classify_local_guide_place({"highway": "bus_stop"}), "transport")
+        self.assertEqual(classify_local_guide_place({"amenity": "cafe"}), "food")
+        self.assertEqual(classify_local_guide_place({"amenity": "pharmacy"}), "essentials")
+
+    async def test_local_guide_sorts_nearby_places_and_marks_walk_time_as_estimated(self):
+        class FakeResponse:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {
+                    "elements": [
+                        {"type": "node", "id": 71001, "lat": 12.0, "lon": 22.002,
+                         "tags": {"name": "Far Cafe", "amenity": "cafe"}},
+                        {"type": "node", "id": 71002, "lat": 12.0, "lon": 22.001,
+                         "tags": {"name": "Nearby Bus Stop", "highway": "bus_stop"}},
+                        {"type": "node", "id": 71003, "lat": 12.0, "lon": 22.003,
+                         "tags": {"name": "Pharmacy", "amenity": "pharmacy"}},
+                    ]
+                }
+
+        client = type("FakeClient", (), {})()
+        client.post = AsyncMock(return_value=FakeResponse())
+        results = await nearby_local_guide(client, 12.0, 22.0, radius_m=1000)
+        self.assertEqual(results[0]["name"], "Nearby Bus Stop")
+        self.assertEqual(results[0]["guideCategory"], "transport")
+        self.assertEqual(results[1]["guideCategory"], "food")
+        self.assertEqual(results[0]["distanceStatus"], "ESTIMATED")
+        self.assertGreaterEqual(results[0]["estimatedWalkMinutes"], 1)
+        self.assertIn("not a routed walking time", results[0]["estimatedWalkNote"])
+        self.assertEqual(results[0]["provider"], "OpenStreetMap Overpass")
 
 
 class TripRequestTests(unittest.TestCase):
