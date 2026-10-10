@@ -101,20 +101,17 @@ The code is kept intentionally straightforward:
 - no secrets committed to the repository
 - dynamic integrations should be introduced behind clear service/data boundaries
 
-## Next engineering stage
+## Engineering roadmap (updated)
 
-The visual prototype is the first working foundation. The next implementation stage is to replace demonstration values with validated service adapters and persistence:
+Now implemented in `main`: Supabase email/password and Google OAuth flows (when configured), owner-scoped cloud trip persistence, guest-trip import, live OSM place discovery, live route/weather context, provider handoff links, cache/input safeguards and CI coverage.
 
-1. Authentication provider + secure session handling
-2. Database schema for users, trips, destinations, providers, rentals and source provenance
-3. Geocoding/map provider abstraction
-4. Transport provider adapters
-5. Rental-provider/local-business adapter
-6. Temple/government source ingestion pipeline
-7. Budget calculation service
-8. AI planner that consumes validated structured data
-9. Automated data freshness/validation tests
-10. Deployment and production environment configuration
+Remaining integration work depends on outside providers or production setup:
+
+1. Configure the owner's Supabase project, redirect allow-list and Google OAuth credentials.
+2. Connect authorized train, bus, flight, stay and vehicle providers for prices, inventory and booking actions.
+3. Add official temple/government source ingestion and independent source verification for opening hours, darshan rules and schedules.
+4. Add alerts, data-freshness monitoring and deployment observability.
+5. Run end-to-end testing against actual configured provider accounts and deployment domains.
 
 
 ## Implemented next-stage foundation
@@ -156,12 +153,11 @@ Live provider credentials are still intentionally not required for the prototype
 
 ## Next execution order
 
-1. Supabase Auth session and Google OAuth integration.
-2. Geocoding and route adapters with explicit unavailable states.
-3. Transport search adapters for trains, buses, flights and ferries.
-4. Rental, hotel, food and temple provider adapters with source/checked-at metadata.
-5. AI itinerary generation from validated structured provider data.
-6. Production tests and deployment configuration.
+1. Configure and verify Supabase Auth, SQL migrations and Google OAuth for the actual deployment URL.
+2. Add authorized commercial transport, accommodation and rental data providers.
+3. Build official-source temple/pilgrimage ingestion with checked timestamps and explicit unavailable states.
+4. Test real sign-in, cloud save/import/delete flows against the deployed Supabase project.
+5. Deploy and add monitoring for provider failures, rate limits and data freshness.
 
 
 ## Real-time open-source implementation
@@ -225,8 +221,8 @@ Not fabricated: train/flight/bus/hotel/rental booking fares, seat/room/vehicle a
 - A database foundation and owner-scoped RLS policies in migrations `001` and `002`.
 
 **Not connected / not a live booking feature**
-- Email/password authentication and Google OAuth: the modal is a UI prototype and does not create a session.
-- Cross-device account sync and persistence: Supabase schema exists but the frontend is not yet wired to Supabase.
+- Email/password authentication and Google OAuth: wired to Supabase Auth when `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are configured; Google also needs provider credentials set in Supabase.
+- Cross-device account sync and persistence: trips, itinerary JSON and source context are saved to Supabase when signed in. Guest trips stay local until imported. Run migrations `001`–`003` first.
 - Train, bus, flight, taxi, ferry, accommodation, restaurant and rental inventory, fares, seat/room/vehicle availability, offers, cancellations or booking confirmations. These require authorized provider integrations.
 - Official temple schedules, darshan slots and cultural/heritage content ingestion. Demo Explore cards remain explicitly demo data.
 - The current route is an **OSRM driving route**, not a comparison across all transport modes.
