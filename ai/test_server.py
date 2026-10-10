@@ -74,11 +74,12 @@ class PedestrianRoutingTests(unittest.IsolatedAsyncioTestCase):
 
         client = type("FakeClient", (), {})()
         client.post = AsyncMock(return_value=FakeResponse())
-        result = await pedestrian_route(
-            client,
-            {"latitude": 14.47001, "longitude": 78.82001},
-            {"latitude": 14.47211, "longitude": 78.82321},
-        )
+        with patch.object(server, "VALHALLA_MIN_INTERVAL_SECONDS", 0):
+            result = await pedestrian_route(
+                client,
+                {"latitude": 14.47001, "longitude": 78.82001},
+                {"latitude": 14.47211, "longitude": 78.82321},
+            )
 
         self.assertEqual(result["status"], "LIVE")
         self.assertEqual(result["distanceMeters"], 720)
@@ -98,12 +99,13 @@ class PedestrianRoutingTests(unittest.IsolatedAsyncioTestCase):
 
         client = type("FakeClient", (), {})()
         client.post = AsyncMock(return_value=FakeResponse())
-        with self.assertRaises(server.HTTPException):
-            await pedestrian_route(
-                client,
-                {"latitude": 30.00001, "longitude": 30.00001},
-                {"latitude": 30.00211, "longitude": 30.00321},
-            )
+        with patch.object(server, "VALHALLA_MIN_INTERVAL_SECONDS", 0):
+            with self.assertRaises(server.HTTPException):
+                await pedestrian_route(
+                    client,
+                    {"latitude": 30.00001, "longitude": 30.00001},
+                    {"latitude": 30.00211, "longitude": 30.00321},
+                )
 
     def test_walking_route_request_validates_all_coordinates(self):
         LocalWalkingRouteRequest(
