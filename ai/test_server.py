@@ -1,10 +1,10 @@
 import unittest
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import server
 from pydantic import ValidationError
 
-from server import (LocalGuideRequest, PlaceSearchRequest, TripRequest, _cache, cached, classify_local_guide_place, ground_ai_plan, haversine_distance_m, nearby_local_guide, put_cache, safe_http_url)
+from server import (LocalGuideQuestion, LocalGuideRequest, PlaceSearchRequest, TripRequest, _cache, cached, classify_local_guide_place, create_local_guide_answer, ground_ai_plan, haversine_distance_m, nearby_local_guide, put_cache, safe_http_url)
 
 
 class GooglePlacesFallbackTests(unittest.IsolatedAsyncioTestCase):
@@ -107,6 +107,62 @@ class LocalGuideTests(unittest.IsolatedAsyncioTestCase):
         self.assertGreaterEqual(results[0]["estimatedWalkMinutes"], 1)
         self.assertIn("not a routed walking time", results[0]["estimatedWalkNote"])
         self.assertEqual(results[0]["provider"], "OpenStreetMap Overpass")
+
+
+class LocalGuideQuestionTests(unittest.IsolatedAsyncioTestCase):
+    def test_accepts_only_the_three_supported_languages_and_party_sizes(self):
+        LocalGuideQuestion(question="Where can I eat?", language="en", travellers=1)
+        LocalGuideQuestion(question="ఎక్కడ భోజనం చేయవచ్చు?", language="te", travellers=2)
+        with self.assertRaises(ValidationError):
+            LocalGuideQuestion(question="Where can I eat?", language="ta", travellers=1)
+        with self.assertRaises(ValidationError):
+            LocalGuideQuestion(question="Where can I eat?", language="en", travellers=3)
+        with self.assertRaises(ValidationError):
+            LocalGuideQuestion(question="ok", language="en", travellers=1)
+
+    async def test_answer_prompt_uses_selected_language_and_nearby_context(self):
+        class FakeResponse:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {"message": {"content": "మీరు ముందుగా నడక మార్గాన్ని తనిఖీ చేయండి."}}
+
+        class FakeClient:
+            payload = None
+
+            async def post(self, url, **kwargs):
+                self.payload = kwargs["json"]
+                return FakeResponse()
+
+        fake_client = FakeClient()
+
+        class FakeClientContext:
+            async def __aenter__(self):
+                return fake_client
+
+            async def __aexit__(self, exc_type, exc_value, traceback):
+                return False
+
+        request = LocalGuideQuestion(
+            question="ఎక్కడ భోజనం చేయవచ్చు?",
+            language="te",
+            travellers=1,
+            places=[{
+                "name": "Nearby Cafe",
+                "guideCategory": "food",
+                "distanceMeters": 250,
+                "estimatedWalkMinutes": 5,
+                "provider": "OpenStreetMap Overpass",
+            }],
+        )
+        with patch("server.httpx.AsyncClient", return_value=FakeClientContext()):
+            answer = await create_local_guide_answer(request)
+
+        self.assertIn("నడక మార్గాన్ని", answer)
+        self.assertIn("Answer entirely in Telugu", fake_client.payload["messages"][0]["content"])
+        self.assertIn("Nearby Cafe", fake_client.payload["messages"][1]["content"])
+        self.assertEqual(fake_client.payload["options"]["temperature"], 0.2)
 
 
 class TripRequestTests(unittest.TestCase):
