@@ -99,6 +99,7 @@ class LocalGuideTests(unittest.IsolatedAsyncioTestCase):
         client = type("FakeClient", (), {})()
         client.post = AsyncMock(return_value=FakeResponse())
         results = await nearby_local_guide(client, 12.0, 22.0, radius_m=1000)
+        self.assertIn("\n", client.post.await_args.kwargs["data"]["data"])
         self.assertEqual(results[0]["name"], "Nearby Bus Stop")
         self.assertEqual(results[0]["guideCategory"], "transport")
         self.assertEqual(results[1]["guideCategory"], "food")
