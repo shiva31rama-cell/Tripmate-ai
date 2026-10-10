@@ -482,3 +482,32 @@ button:disabled { opacity: .65; cursor: wait; }
   .local-guide-ask-form { grid-template-columns: 1fr; }
   .local-guide-ask-form .primary-button { width: 100%; }
 }
+
+
+/* Walking-first mobility guidance: advice is distance-based, not a safety guarantee. */
+.local-guide-mobility-advice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 12px 0 8px;
+  padding: 10px 11px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--soft);
+  color: var(--accent-dark);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+.local-guide-mobility-advice svg { flex: 0 0 auto; margin-top: 1px; }
+.local-guide-mobility-advice.compareModes { background: #f5f4ed; }
+.local-guide-mobility-advice.transitFirst { background: #f2f3f5; }
+.local-guide-mobility-note {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+@media (max-width: 640px) {
+  .local-guide-mobility-advice { font-size: 12px; }
+}
