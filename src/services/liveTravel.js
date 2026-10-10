@@ -45,8 +45,8 @@ export async function searchLocalGuide({ latitude, longitude, radiusMeters = 100
 export async function routeLocalWalk({ origin, destination, signal }) {
   const points = [origin, destination];
   for (const point of points) {
-    if (!point || !Number.isFinite(point.latitude) || point.latitude < -90 || point.latitude > 90 ||
-        !Number.isFinite(point.longitude) || point.longitude < -180 || point.longitude > 180) {
+    if (!point || typeof point.latitude !== "number" || !Number.isFinite(point.latitude) || point.latitude < -90 || point.latitude > 90 ||
+        typeof point.longitude !== "number" || !Number.isFinite(point.longitude) || point.longitude < -180 || point.longitude > 180) {
       throw new Error("A valid origin and destination are required for a walking route.");
     }
   }
