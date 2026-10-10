@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Bus, Check, Copy, Footprints, LocateFixed, MapPin, MessageCircle, Navigation, RefreshCw, Send, ShieldCheck } from "lucide-react";
-import { askLocalGuide, searchLocalGuide } from "../services/liveTravel";
+import { askLocalGuide, routeLocalWalk, searchLocalGuide } from "../services/liveTravel";
 import { getMobilityAdvice } from "../services/localGuideAdvice";
 
 const COPY = {
@@ -21,6 +21,7 @@ const COPY = {
     unavailableLocation: "Your device could not determine a location. Try again where you have a clearer signal.",
     locationTimeout: "Location lookup took too long. Please try again.",
     providerError: "The nearby map service could not respond. Check your connection and try again.",
+    routeWalking: "Calculate walking route", routeSearching: "Calculating walking route…", routeLength: "Pedestrian route distance", routeUnavailable: "A pedestrian route could not be verified. Open map directions and check local conditions.", routeAdvice: "Routing distance and time are provider results, not a guarantee of sidewalk access, safe crossings or current closures.",
     walkFirst: "Nearby — check walking first",
     compareModes: "Compare walking and public transport",
     transitFirst: "Longer distance — compare public transport",
@@ -66,6 +67,7 @@ const COPY = {
     unavailableLocation: "మీ పరికరం స్థానాన్ని గుర్తించలేకపోయింది. మంచి సిగ్నల్ ఉన్న చోట మళ్లీ ప్రయత్నించండి.",
     locationTimeout: "స్థానాన్ని గుర్తించడానికి ఎక్కువ సమయం పట్టింది. మళ్లీ ప్రయత్నించండి.",
     providerError: "దగ్గరి ప్రదేశాల మ్యాప్ సేవ స్పందించలేదు. ఇంటర్నెట్‌ను తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.",
+    routeWalking: "నడక మార్గాన్ని లెక్కించు", routeSearching: "నడక మార్గాన్ని లెక్కిస్తోంది…", routeLength: "నడక మార్గ దూరం", routeUnavailable: "నడక మార్గాన్ని ధృవీకరించలేకపోయాం. మ్యాప్ దిశలను తెరిచి స్థానిక పరిస్థితులను తనిఖీ చేయండి.", routeAdvice: "మార్గ దూరం, సమయం సేవ అందించిన వివరాలు మాత్రమే; ఫుట్‌పాత్, సురక్షిత క్రాసింగ్‌లు లేదా రహదారి మూసివేతలకు హామీ కాదు.",
     walkFirst: "దగ్గరలో ఉంది — ముందుగా నడక మార్గం చూడండి",
     compareModes: "నడక, ప్రజా రవాణాను పోల్చండి",
     transitFirst: "దూరం ఎక్కువ — ప్రజా రవాణాను పరిశీలించండి",
@@ -111,6 +113,7 @@ const COPY = {
     unavailableLocation: "आपका डिवाइस लोकेशन पता नहीं कर पाया। बेहतर सिग्नल वाली जगह से फिर कोशिश करें।",
     locationTimeout: "लोकेशन मिलने में बहुत समय लगा। कृपया फिर कोशिश करें।",
     providerError: "आस-पास की मैप सेवा जवाब नहीं दे सकी। इंटरनेट जाँचकर फिर कोशिश करें।",
+    routeWalking: "पैदल रास्ता निकालें", routeSearching: "पैदल रास्ता निकाला जा रहा है…", routeLength: "पैदल मार्ग की दूरी", routeUnavailable: "पैदल रास्ते की पुष्टि नहीं हो सकी। मैप दिशा खोलें और स्थानीय स्थिति जाँचें।", routeAdvice: "मार्ग की दूरी और समय रूटिंग सेवा के परिणाम हैं; फुटपाथ, सुरक्षित क्रॉसिंग या सड़क बंद होने की गारंटी नहीं है।",
     walkFirst: "पास में — पहले पैदल रास्ता जाँचें",
     compareModes: "पैदल और सार्वजनिक परिवहन की तुलना करें",
     transitFirst: "दूरी अधिक — सार्वजनिक परिवहन देखें",
@@ -181,6 +184,15 @@ const PRACTICAL_PHRASES = [
   },
 ];
 
+function placeKey(place) {
+  return place.id || (place.name + "-" + place.latitude + "-" + place.longitude);
+}
+
+function formatDistance(metres) {
+  if (!Number.isFinite(Number(metres))) return "";
+  return Number(metres) >= 1000 ? (Number(metres) / 1000).toFixed(1) + " km" : Math.round(Number(metres)) + " m";
+}
+
 function distanceLabel(metres, copy) {
   if (!Number.isFinite(metres)) return "";
   return metres >= 1000
@@ -207,6 +219,8 @@ export default function LocalGuide({ language = "en" }) {
   const [filter, setFilter] = useState("all");
   const [coordinates, setCoordinates] = useState(null);
   const [places, setPlaces] = useState([]);
+  const [walkingRoutes, setWalkingRoutes] = useState({});
+  const [routingPlaceId, setRoutingPlaceId] = useState("");
   const [checkedAt, setCheckedAt] = useState("");
   const [providerStatus, setProviderStatus] = useState("");
   const [message, setMessage] = useState("");
@@ -257,6 +271,7 @@ export default function LocalGuide({ language = "en" }) {
       const result = await searchLocalGuide({ ...point, radiusMeters: Number(radius) });
       const nextPlaces = Array.isArray(result.places) ? result.places : [];
       setPlaces(nextPlaces);
+      setWalkingRoutes({});
       setCheckedAt(result.checkedAt || "");
       setProviderStatus(result.status || "UNAVAILABLE");
       setMessage(result.message || "");
@@ -275,6 +290,24 @@ export default function LocalGuide({ language = "en" }) {
       setHasSearched(true);
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function calculateWalkingRoute(place) {
+    if (!coordinates || !Number.isFinite(Number(place.latitude)) || !Number.isFinite(Number(place.longitude))) return;
+    const key = placeKey(place);
+    setRoutingPlaceId(key);
+    setWalkingRoutes((current) => ({ ...current, [key]: { status: "LOADING" } }));
+    try {
+      const result = await routeLocalWalk({
+        origin: coordinates,
+        destination: { latitude: Number(place.latitude), longitude: Number(place.longitude) },
+      });
+      setWalkingRoutes((current) => ({ ...current, [key]: result }));
+    } catch {
+      setWalkingRoutes((current) => ({ ...current, [key]: { status: "UNAVAILABLE" } }));
+    } finally {
+      setRoutingPlaceId("");
     }
   }
 
@@ -394,7 +427,10 @@ export default function LocalGuide({ language = "en" }) {
 
           {filteredPlaces.length > 0 && (
             <div className="local-guide-grid">
-              {filteredPlaces.map((place) => (
+              {filteredPlaces.map((place) => {
+                const key = placeKey(place);
+                const walkingRoute = walkingRoutes[key];
+                return (
                 <article className="local-guide-place" key={place.id || (place.name + "-" + place.latitude + "-" + place.longitude)}>
                   <div className="local-guide-place-top">
                     <span className="local-guide-live">{t.live}</span>
@@ -411,13 +447,25 @@ export default function LocalGuide({ language = "en" }) {
                       </div>
                     ) : null;
                   })()}
-                  {Number.isFinite(Number(place.estimatedWalkMinutes)) && (
+                  {walkingRoute?.status === "LIVE" ? (
+                    <div className="local-guide-walking-route" aria-live="polite">
+                      <strong>{t.routeLength}: {formatDistance(walkingRoute.distanceMeters)}</strong>
+                      <p>{t.about} {walkingRoute.durationMinutes} {t.minutesWalk}</p>
+                      <small>{walkingRoute.provider} · {t.routeAdvice}</small>
+                    </div>
+                  ) : walkingRoute?.status === "UNAVAILABLE" ? (
+                    <p className="local-guide-route-error" role="status">{t.routeUnavailable}</p>
+                  ) : Number.isFinite(Number(place.estimatedWalkMinutes)) ? (
                     <p className="local-guide-walk-estimate"><Footprints size={15} /> {t.about} {place.estimatedWalkMinutes} {t.minutesWalk}</p>
-                  )}
+                  ) : null}
                   {place.openingHours && <small className="local-guide-hours">{place.openingHours} · {t.verifyVenue}</small>}
                   <div className="local-guide-place-actions">
                     {coordinates && (
                       <>
+                        <button type="button" className="local-guide-route-button" onClick={() => calculateWalkingRoute(place)} disabled={routingPlaceId === key || !Number.isFinite(Number(place.latitude)) || !Number.isFinite(Number(place.longitude))}>
+                          {routingPlaceId === key ? <RefreshCw size={14} className="guide-spin" /> : <Footprints size={14} />}
+                          {routingPlaceId === key ? t.routeSearching : t.routeWalking}
+                        </button>
                         <a href={directionsUrl(coordinates, place, "walking")} target="_blank" rel="noreferrer noopener"><Footprints size={15} /> {t.walking}</a>
                         <a href={directionsUrl(coordinates, place, "transit")} target="_blank" rel="noreferrer noopener"><Bus size={15} /> {t.transit}</a>
                       </>
@@ -425,7 +473,8 @@ export default function LocalGuide({ language = "en" }) {
                     {place.osmUrl && <a href={place.osmUrl} target="_blank" rel="noreferrer noopener"><Navigation size={15} /> {t.viewMap}</a>}
                   </div>
                 </article>
-              ))}
+                );
+              })}
             </div>
           )}
           <p className="local-guide-transport-note">{t.transportNote}</p>
