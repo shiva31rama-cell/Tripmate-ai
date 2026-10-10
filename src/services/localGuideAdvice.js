@@ -1,6 +1,7 @@
 const THRESHOLDS = { walkFirstMaxMeters: 500, compareMaxMeters: 1200 };
 
 export function getMobilityAdvice(distanceMeters, language = "en") {
+  if (distanceMeters === null || distanceMeters === undefined || distanceMeters === "") return null;
   const distance = Number(distanceMeters);
   if (!Number.isFinite(distance) || distance < 0) return null;
 
