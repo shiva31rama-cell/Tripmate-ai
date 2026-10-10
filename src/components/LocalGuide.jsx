@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Bus, Footprints, LocateFixed, MapPin, MessageCircle, Navigation, RefreshCw, Send, ShieldCheck } from "lucide-react";
 import { askLocalGuide, searchLocalGuide } from "../services/liveTravel";
+import { getMobilityAdvice } from "../services/localGuideAdvice";
 
 const COPY = {
   en: {
@@ -20,6 +21,10 @@ const COPY = {
     unavailableLocation: "Your device could not determine a location. Try again where you have a clearer signal.",
     locationTimeout: "Location lookup took too long. Please try again.",
     providerError: "The nearby map service could not respond. Check your connection and try again.",
+    walkFirst: "Nearby — check walking first",
+    compareModes: "Compare walking and public transport",
+    transitFirst: "Longer distance — compare public transport",
+    mobilityNote: "This suggestion uses straight-line distance only. Check the actual route, sidewalks, lighting, weather and local conditions before deciding.",
     guideTipTitle: "A smarter way to move around",
     guideTip: "For a short trip, compare walking first. Open walking directions to check the actual route. If the path seems isolated, lacks sidewalks, is blocked, or it is late, choose a trusted local transport option instead of taking an unsafe shortcut.",
     transportNote: "This opens Google Maps. Transit choices, timings and fares appear only when its local data supports them; TripMate has not verified a live fare or departure.",
@@ -55,6 +60,10 @@ const COPY = {
     unavailableLocation: "మీ పరికరం స్థానాన్ని గుర్తించలేకపోయింది. మంచి సిగ్నల్ ఉన్న చోట మళ్లీ ప్రయత్నించండి.",
     locationTimeout: "స్థానాన్ని గుర్తించడానికి ఎక్కువ సమయం పట్టింది. మళ్లీ ప్రయత్నించండి.",
     providerError: "దగ్గరి ప్రదేశాల మ్యాప్ సేవ స్పందించలేదు. ఇంటర్నెట్‌ను తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.",
+    walkFirst: "దగ్గరలో ఉంది — ముందుగా నడక మార్గం చూడండి",
+    compareModes: "నడక, ప్రజా రవాణాను పోల్చండి",
+    transitFirst: "దూరం ఎక్కువ — ప్రజా రవాణాను పరిశీలించండి",
+    mobilityNote: "ఈ సూచన సూటి దూరం ఆధారంగా మాత్రమే ఉంటుంది. నిర్ణయం తీసుకునే ముందు అసలు దారి, ఫుట్‌పాత్‌లు, వెలుతురు, వాతావరణం, స్థానిక పరిస్థితులు చూడండి.",
     guideTipTitle: "తెలివిగా ప్రయాణించే మార్గం",
     guideTip: "చిన్న దూరం అయితే ముందుగా నడకను పరిశీలించండి. అసలు మార్గం చూడటానికి నడక దిశలను తెరవండి. మార్గం నిర్మానుష్యంగా ఉంటే, ఫుట్‌పాత్ లేకపోతే, మూసి ఉంటే లేదా ఆలస్యమైతే, ప్రమాదకరమైన షార్ట్‌కట్ బదులు నమ్మకమైన స్థానిక రవాణాను ఎంచుకోండి.",
     transportNote: "ఇది Google Mapsను తెరుస్తుంది. స్థానిక సమాచారం ఉన్నప్పుడే రవాణా ఎంపికలు, సమయాలు, ఛార్జీలు కనిపిస్తాయి; TripMate ప్రత్యక్ష ఛార్జీ లేదా బయలుదేరే సమయాన్ని ధృవీకరించలేదు.",
@@ -90,6 +99,10 @@ const COPY = {
     unavailableLocation: "आपका डिवाइस लोकेशन पता नहीं कर पाया। बेहतर सिग्नल वाली जगह से फिर कोशिश करें।",
     locationTimeout: "लोकेशन मिलने में बहुत समय लगा। कृपया फिर कोशिश करें।",
     providerError: "आस-पास की मैप सेवा जवाब नहीं दे सकी। इंटरनेट जाँचकर फिर कोशिश करें।",
+    walkFirst: "पास में — पहले पैदल रास्ता जाँचें",
+    compareModes: "पैदल और सार्वजनिक परिवहन की तुलना करें",
+    transitFirst: "दूरी अधिक — सार्वजनिक परिवहन देखें",
+    mobilityNote: "यह सुझाव केवल सीधी दूरी पर आधारित है। निर्णय से पहले असली रास्ता, फुटपाथ, रोशनी, मौसम और स्थानीय स्थिति जाँचें।",
     guideTipTitle: "आस-पास जाने का समझदार तरीका",
     guideTip: "छोटी दूरी के लिए पहले पैदल जाने का विकल्प देखें। असली रास्ता जाँचने के लिए पैदल दिशा खोलें। रास्ता सुनसान लगे, फुटपाथ न हो, रास्ता बंद हो या देर हो गई हो, तो असुरक्षित शॉर्टकट के बजाय भरोसेमंद स्थानीय परिवहन चुनें।",
     transportNote: "यह Google Maps खोलेगा। सार्वजनिक परिवहन, समय और किराया तभी दिखेंगे जब उस क्षेत्र का डेटा उपलब्ध होगा; TripMate ने लाइव किराया या प्रस्थान समय की पुष्टि नहीं की है।",
@@ -294,6 +307,15 @@ export default function LocalGuide({ language = "en" }) {
                   </div>
                   <h3>{place.name}</h3>
                   <p className="local-guide-place-category">{t.filters[place.guideCategory] || t.filters.other}</p>
+                  {(() => {
+                    const advice = getMobilityAdvice(place.distanceMeters, language);
+                    return advice ? (
+                      <div className={`local-guide-mobility-advice ${advice.kind}`}>
+                        <Footprints size={15} />
+                        <span>{t[advice.labelKey]}</span>
+                      </div>
+                    ) : null;
+                  })()}
                   {Number.isFinite(Number(place.estimatedWalkMinutes)) && (
                     <p className="local-guide-walk-estimate"><Footprints size={15} /> {t.about} {place.estimatedWalkMinutes} {t.minutesWalk}</p>
                   )}
@@ -312,6 +334,7 @@ export default function LocalGuide({ language = "en" }) {
             </div>
           )}
           <p className="local-guide-transport-note">{t.transportNote}</p>
+          <p className="local-guide-mobility-note">{t.mobilityNote}</p>
           {message && language === "en" && <p className="local-guide-provider-message">{message}</p>}
         </section>
       )}
