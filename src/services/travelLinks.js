@@ -41,6 +41,30 @@ export function buildTravelSearchLinks(source, destination) {
       url: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`bike car rental in ${to}`)}`,
     },
     {
+      id: "local-transport",
+      label: "Local taxis and autos",
+      provider: "Google Maps · local business search",
+      url: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`taxi auto cab in ${to}`)}`,
+    },
+    {
+      id: "food",
+      label: "Restaurants and food",
+      provider: "Google Maps · local business search",
+      url: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`restaurants in ${to}`)}`,
+    },
+    {
+      id: "official-tourism",
+      label: "Official India tourism guide",
+      provider: "Incredible India · Ministry of Tourism",
+      url: "https://www.incredibleindia.gov.in/en",
+    },
+    {
+      id: "ap-tourism",
+      label: "Andhra Pradesh tourism (if relevant)",
+      provider: "Official APTDC tourism and accommodation portal",
+      url: "https://tourism.ap.gov.in/home",
+    },
+    {
       id: "places",
       label: "Nearby places",
       provider: "OpenStreetMap · map and place search",
