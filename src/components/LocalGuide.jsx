@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Bus, Footprints, LocateFixed, MapPin, MessageCircle, Navigation, RefreshCw, Send, ShieldCheck } from "lucide-react";
+import { Bus, Check, Copy, Footprints, LocateFixed, MapPin, MessageCircle, Navigation, RefreshCw, Send, ShieldCheck } from "lucide-react";
 import { askLocalGuide, searchLocalGuide } from "../services/liveTravel";
 import { getMobilityAdvice } from "../services/localGuideAdvice";
 
@@ -142,6 +142,44 @@ const COPY = {
 };
 
 const LANGUAGE_LOCALES = { en: "en-IN", te: "te-IN", hi: "hi-IN" };
+const LANGUAGE_NAMES = { en: "English", te: "తెలుగు", hi: "हिन्दी" };
+const PRACTICAL_PHRASES = [
+  {
+    id: "walk",
+    title: { en: "Check if it is walkable", te: "నడిచి వెళ్లవచ్చా అని అడగండి", hi: "पैदल जाने के बारे में पूछें" },
+    en: "Is this place within walking distance?",
+    te: "ఈ ప్రదేశానికి నడిచి వెళ్లవచ్చా?",
+    hi: "क्या इस जगह तक पैदल जा सकते हैं?",
+  },
+  {
+    id: "bus",
+    title: { en: "Find public transport", te: "ప్రజా రవాణా గురించి అడగండి", hi: "सार्वजनिक परिवहन पूछें" },
+    en: "Where is the nearest bus stop?",
+    te: "దగ్గరలో బస్ స్టాప్ ఎక్కడ ఉంది?",
+    hi: "सबसे नज़दीकी बस स्टॉप कहाँ है?",
+  },
+  {
+    id: "fare",
+    title: { en: "Ask the fare first", te: "ముందుగా ఛార్జీ అడగండి", hi: "पहले किराया पूछें" },
+    en: "Please tell me the fare before we start.",
+    te: "దయచేసి బయలుదేరే ముందు ఛార్జీ చెప్పండి.",
+    hi: "कृपया चलने से पहले किराया बता दीजिए।",
+  },
+  {
+    id: "entrance",
+    title: { en: "Find the correct entrance", te: "సరైన ప్రవేశ ద్వారం అడగండి", hi: "सही प्रवेश द्वार पूछें" },
+    en: "Could you show me the public entrance?",
+    te: "దయచేసి ప్రజలు వెళ్లే ప్రవేశ ద్వారం చూపించండి.",
+    hi: "कृपया सार्वजनिक प्रवेश द्वार दिखा दीजिए।",
+  },
+  {
+    id: "address",
+    title: { en: "Ask for help with an address", te: "చిరునామా గురించి సహాయం అడగండి", hi: "पते के लिए मदद माँगें" },
+    en: "Could you help me find this address?",
+    te: "ఈ చిరునామా కనుక్కోవడంలో సహాయం చేస్తారా?",
+    hi: "क्या आप यह पता ढूँढने में मेरी मदद करेंगे?",
+  },
+];
 
 function distanceLabel(metres, copy) {
   if (!Number.isFinite(metres)) return "";
@@ -181,11 +219,24 @@ export default function LocalGuide({ language = "en" }) {
   const [answerLanguage, setAnswerLanguage] = useState("en");
   const [isAsking, setIsAsking] = useState(false);
   const [askError, setAskError] = useState("");
+  const [copiedPhrase, setCopiedPhrase] = useState("");
 
   const filteredPlaces = useMemo(() => {
     const filtered = places.filter((place) => filter === "all" || place.guideCategory === filter);
     return [...filtered].sort((a, b) => Number(a.distanceMeters || 0) - Number(b.distanceMeters || 0));
   }, [places, filter]);
+
+  async function copyPhrase(phrase) {
+    const textToCopy = phrase[language] || phrase.en;
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      setCopiedPhrase(phrase.id);
+      window.setTimeout(() => setCopiedPhrase(""), 1800);
+    } catch {
+      setQuestion(textToCopy);
+      setCopiedPhrase("");
+    }
+  }
 
   async function findNearby() {
     setError("");
@@ -287,6 +338,32 @@ export default function LocalGuide({ language = "en" }) {
       <section className="local-guide-tip">
         <div className="local-guide-tip-icon"><ShieldCheck size={21} /></div>
         <div><h3>{t.guideTipTitle}</h3><p>{t.guideTip}</p></div>
+      </section>
+
+      <section className="local-guide-phrases" aria-labelledby="local-guide-phrases-title">
+        <div className="local-guide-phrases-heading">
+          <div>
+            <span className="eyebrow">{language === "te" ? "స్థానికంగా మాట్లాడేందుకు" : language === "hi" ? "स्थानीय लोगों से बात करने के लिए" : "REAL-WORLD HELP"}</span>
+            <h2 id="local-guide-phrases-title">{language === "te" ? "పనికొచ్చే మాటలు" : language === "hi" ? "काम आने वाले वाक्य" : "Useful phrases for unfamiliar situations"}</h2>
+            <p>{language === "te" ? "నడక, బస్సు, ఛార్జీ లేదా సరైన ప్రవేశ ద్వారం గురించి అడగడానికి ఉపయోగించండి." : language === "hi" ? "पैदल रास्ते, बस, किराए या सही प्रवेश द्वार के बारे में पूछने के लिए इस्तेमाल करें।" : "Ask about walking, buses, fares and the correct entrance. Copy the version in your selected app language."}</p>
+          </div>
+        </div>
+        <div className="local-guide-phrases-grid">
+          {PRACTICAL_PHRASES.map((phrase) => (
+            <article className="local-guide-phrase-card" key={phrase.id}>
+              <h3>{phrase.title[language] || phrase.title.en}</h3>
+              <p><span>English</span>{phrase.en}</p>
+              <p><span>తెలుగు</span>{phrase.te}</p>
+              <p><span>हिन्दी</span>{phrase.hi}</p>
+              <button type="button" className="local-guide-copy-phrase" onClick={() => copyPhrase(phrase)}>
+                {copiedPhrase === phrase.id ? <Check size={15} /> : <Copy size={15} />}
+                {copiedPhrase === phrase.id
+                  ? (language === "te" ? "కాపీ అయింది" : language === "hi" ? "कॉपी हो गया" : "Copied")
+                  : (language === "te" ? "ఎంచుకున్న భాషలో కాపీ చేయండి" : language === "hi" ? "चुनी हुई भाषा कॉपी करें" : "Copy selected language")}
+              </button>
+            </article>
+          ))}
+        </div>
       </section>
 
       {error && <p className="inline-error local-guide-error" role="alert">{error}</p>}
