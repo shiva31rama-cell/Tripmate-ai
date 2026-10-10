@@ -107,8 +107,13 @@ function App() {
         if (mounted) setSyncNotice(error instanceof Error ? error.message : "Could not restore your session.");
       });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) setAuthOpen(false);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "PASSWORD_RECOVERY") {
+        setAuthMode("reset");
+        setAuthOpen(true);
+      } else if (session?.user) {
+        setAuthOpen(false);
+      }
       Promise.resolve().then(() => applySession(session));
     });
 
@@ -1100,7 +1105,12 @@ function AuthModal({ mode, setMode, onClose, onGuest, configured, user, onSignOu
     }
     setPending(true);
     try {
-      if (mode === "signup") {
+      if (mode === "reset") {
+        const { error: authError } = await supabase.auth.updateUser({ password });
+        if (authError) throw authError;
+        setNotice("Your password has been updated. You can keep using TripMate securely.");
+        onAuthSuccess();
+      } else if (mode === "signup") {
         const { data, error: authError } = await supabase.auth.signUp({
           email: email.trim(),
           password,
@@ -1125,6 +1135,31 @@ function AuthModal({ mode, setMode, onClose, onGuest, configured, user, onSignOu
       }
     } catch (authError) {
       setError(authError instanceof Error ? authError.message : "Authentication failed. Check your details and Supabase settings.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function sendPasswordReset() {
+    setError("");
+    setNotice("");
+    if (!supabase || !configured) {
+      setError("Configure Supabase first to send a password reset email.");
+      return;
+    }
+    if (!email.trim()) {
+      setError("Enter your account email first.");
+      return;
+    }
+    setPending(true);
+    try {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: window.location.origin,
+      });
+      if (resetError) throw resetError;
+      setNotice("If an account exists for this email, Supabase will send a password reset link. Check your inbox and spam folder.");
+    } catch (resetError) {
+      setError(resetError instanceof Error ? resetError.message : "Could not request a password reset.");
     } finally {
       setPending(false);
     }
@@ -1160,8 +1195,8 @@ function AuthModal({ mode, setMode, onClose, onGuest, configured, user, onSignOu
         <div className="auth-head">
           <span className="brand-mark">T</span>
           <span className="eyebrow">TripMate AI</span>
-          <h2 id="auth-title">{user ? "Your account" : mode === "login" ? "Welcome back" : "Create your account"}</h2>
-          <p>{user ? user.email : mode === "login" ? "Sign in to sync saved trips across devices." : "Create an account to keep your trips in sync."}</p>
+          <h2 id="auth-title">{mode === "reset" ? "Choose a new password" : user ? "Your account" : mode === "signup" ? "Create your account" : "Welcome back"}</h2>
+          <p>{mode === "reset" ? "Set a new password for your TripMate account." : user ? user.email : mode === "login" ? "Sign in to sync saved trips across devices." : "Create an account to keep your trips in sync."}</p>
         </div>
 
         {!configured && !user && (
@@ -1171,7 +1206,7 @@ function AuthModal({ mode, setMode, onClose, onGuest, configured, user, onSignOu
           </div>
         )}
 
-        {user ? (
+        {user && mode !== "reset" ? (
           <div className="success-card">
             <Check size={25} />
             <h3>Signed in</h3>
@@ -1182,27 +1217,29 @@ function AuthModal({ mode, setMode, onClose, onGuest, configured, user, onSignOu
           </div>
         ) : (
           <form onSubmit={submitAuth}>
-            <button className="google-button" type="button" onClick={signInWithGoogle} disabled={!configured || pending}>
-              {pending ? "Please wait…" : "Continue with Google"}
-            </button>
-
-            <div className="divider"><span>or use email</span></div>
+            {mode !== "reset" && (
+              <>
+                <button className="google-button" type="button" onClick={signInWithGoogle} disabled={!configured || pending}>
+                  {pending ? "Please wait…" : "Continue with Google"}
+                </button>
+                <div className="divider"><span>or use email</span></div>
+                <label>
+                  Email
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    placeholder="you@example.com"
+                    autoComplete="email"
+                    required
+                    maxLength={254}
+                  />
+                </label>
+              </>
+            )}
 
             <label>
-              Email
-              <input
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="you@example.com"
-                autoComplete="email"
-                required
-                maxLength={254}
-              />
-            </label>
-
-            <label>
-              Password
+              {mode === "reset" ? "New password" : "Password"}
               <input
                 type="password"
                 value={password}
@@ -1219,26 +1256,34 @@ function AuthModal({ mode, setMode, onClose, onGuest, configured, user, onSignOu
             {notice && <div className="auth-success-note" role="status">{notice}</div>}
 
             <button className="primary-button" type="submit" disabled={!configured || pending}>
-              {pending ? "Please wait…" : mode === "login" ? "Login" : "Create account"}
+              {pending ? "Please wait…" : mode === "reset" ? "Update password" : mode === "login" ? "Login" : "Create account"}
             </button>
 
-            <button className="guest-button" type="button" onClick={onGuest}>
-              Skip for now · Continue as guest
-            </button>
-
-            <p className="switch-auth">
-              {mode === "login" ? "New to TripMate?" : "Already have an account?"}{" "}
-              <button
-                type="button"
-                onClick={() => {
-                  setError("");
-                  setNotice("");
-                  setMode(mode === "login" ? "signup" : "login");
-                }}
-              >
-                {mode === "login" ? "Sign up" : "Login"}
+            {mode === "login" && (
+              <button className="guest-button" type="button" onClick={sendPasswordReset} disabled={!configured || pending}>
+                Forgot password? Send reset email
               </button>
-            </p>
+            )}
+            {mode !== "reset" && (
+              <>
+                <button className="guest-button" type="button" onClick={onGuest}>
+                  Skip for now · Continue as guest
+                </button>
+                <p className="switch-auth">
+                  {mode === "login" ? "New to TripMate?" : "Already have an account?"}{" "}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setError("");
+                      setNotice("");
+                      setMode(mode === "login" ? "signup" : "login");
+                    }}
+                  >
+                    {mode === "login" ? "Sign up" : "Login"}
+                  </button>
+                </p>
+              </>
+            )}
           </form>
         )}
       </div>
