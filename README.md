@@ -259,6 +259,14 @@ The frontend now has real Supabase Auth flows and account-scoped trip persistenc
 
 If migrations have not been applied, auth can still work but trip sync will show a clear database error. Guest trips stay in local browser storage and are not uploaded until cloud persistence is explicitly used by a signed-in session.
 
+### Optional Google Places fallback
+
+The open-data path remains the default. If Overpass returns no mapped places or is temporarily unavailable, the backend can optionally query Google Places API (New) when a server-side key is configured. Google Places requires a Google Cloud project, the Places API enabled, billing/provider terms accepted, and an API key restricted to the backend's use. The key must never be exposed through a `VITE_*` variable.
+
+Set `GOOGLE_PLACES_API_KEY` in your private local `.env` file or deployment environment, then restart the backend/container. Docker Compose passes this variable only to the FastAPI service. Without the key, TripMate continues using OpenStreetMap and does not fail solely because Google is unconfigured. Google Places results are labelled with their provider and source URL; they do not provide a booking confirmation or guarantee current venue hours.
+
+Official setup and API reference: https://developers.google.com/maps/documentation/places/web-service
+
 ### Live place search and booking handoffs
 
 - Explore now provides a button-triggered OpenStreetMap search. It verifies a location and requests nearby mapped attractions and places of worship. It is deliberately not autocomplete, to respect public Nominatim's usage policy.
