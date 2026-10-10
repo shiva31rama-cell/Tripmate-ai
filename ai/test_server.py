@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 import server
 from pydantic import ValidationError
 
-from server import (LocalGuideQuestion, LocalGuideRequest, PlaceSearchRequest, TripRequest, _cache, cached, classify_local_guide_place, create_local_guide_answer, ground_ai_plan, haversine_distance_m, nearby_local_guide, put_cache, safe_http_url)
+from server import (LocalGuideQuestion, LocalGuideRequest, LocalWalkingRouteRequest, PlaceSearchRequest, TripRequest, _cache, cached, classify_local_guide_place, create_local_guide_answer, ground_ai_plan, haversine_distance_m, nearby_local_guide, pedestrian_route, put_cache, safe_http_url)
 
 
 class GooglePlacesFallbackTests(unittest.IsolatedAsyncioTestCase):
@@ -59,6 +59,62 @@ class GooglePlacesFallbackTests(unittest.IsolatedAsyncioTestCase):
                 )
         finally:
             server.GOOGLE_PLACES_API_KEY = previous_key
+
+
+
+
+class PedestrianRoutingTests(unittest.IsolatedAsyncioTestCase):
+    async def test_returns_actual_route_distance_and_duration_from_valhalla(self):
+        class FakeResponse:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {"trip": {"summary": {"length": 0.72, "time": 510}}}
+
+        client = type("FakeClient", (), {})()
+        client.post = AsyncMock(return_value=FakeResponse())
+        result = await pedestrian_route(
+            client,
+            {"latitude": 14.47001, "longitude": 78.82001},
+            {"latitude": 14.47211, "longitude": 78.82321},
+        )
+
+        self.assertEqual(result["status"], "LIVE")
+        self.assertEqual(result["distanceMeters"], 720)
+        self.assertEqual(result["durationMinutes"], 9)
+        self.assertEqual(result["provider"], "Valhalla pedestrian routing")
+        payload = client.post.await_args.kwargs["json"]
+        self.assertEqual(payload["costing"], "pedestrian")
+        self.assertEqual(payload["units"], "kilometers")
+
+    async def test_rejects_malformed_route_response_instead_of_fabricating(self):
+        class FakeResponse:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {"trip": {"summary": {"length": "unknown", "time": 50}}}
+
+        client = type("FakeClient", (), {})()
+        client.post = AsyncMock(return_value=FakeResponse())
+        with self.assertRaises(server.HTTPException):
+            await pedestrian_route(
+                client,
+                {"latitude": 30.00001, "longitude": 30.00001},
+                {"latitude": 30.00211, "longitude": 30.00321},
+            )
+
+    def test_walking_route_request_validates_all_coordinates(self):
+        LocalWalkingRouteRequest(
+            originLatitude=14.47, originLongitude=78.82,
+            destinationLatitude=14.48, destinationLongitude=78.83,
+        )
+        with self.assertRaises(ValidationError):
+            LocalWalkingRouteRequest(
+                originLatitude=91, originLongitude=78.82,
+                destinationLatitude=14.48, destinationLongitude=78.83,
+            )
 
 
 class LocalGuideTests(unittest.IsolatedAsyncioTestCase):
