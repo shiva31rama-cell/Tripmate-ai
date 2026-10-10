@@ -294,7 +294,7 @@ export default function LocalGuide({ language = "en" }) {
   }
 
   async function calculateWalkingRoute(place) {
-    if (!coordinates || !Number.isFinite(Number(place.latitude)) || !Number.isFinite(Number(place.longitude))) return;
+    if (!coordinates || place.latitude == null || place.longitude == null || !Number.isFinite(Number(place.latitude)) || !Number.isFinite(Number(place.longitude))) return;
     const key = placeKey(place);
     setRoutingPlaceId(key);
     setWalkingRoutes((current) => ({ ...current, [key]: { status: "LOADING" } }));
@@ -462,7 +462,7 @@ export default function LocalGuide({ language = "en" }) {
                   <div className="local-guide-place-actions">
                     {coordinates && (
                       <>
-                        <button type="button" className="local-guide-route-button" onClick={() => calculateWalkingRoute(place)} disabled={routingPlaceId === key || !Number.isFinite(Number(place.latitude)) || !Number.isFinite(Number(place.longitude))}>
+                        <button type="button" className="local-guide-route-button" onClick={() => calculateWalkingRoute(place)} disabled={Boolean(routingPlaceId) || place.latitude == null || place.longitude == null || !Number.isFinite(Number(place.latitude)) || !Number.isFinite(Number(place.longitude))}>
                           {routingPlaceId === key ? <RefreshCw size={14} className="guide-spin" /> : <Footprints size={14} />}
                           {routingPlaceId === key ? t.routeSearching : t.routeWalking}
                         </button>
