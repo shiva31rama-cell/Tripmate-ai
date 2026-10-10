@@ -288,6 +288,7 @@ The Local Guide view is designed for first-time visitors who arrive somewhere un
 - Results are sorted by approximate straight-line distance. A separately labelled walking-time estimate uses a simple 25% route-detour assumption and 4 km/h walking speed; it is not a calculated pedestrian route.
 - Every place offers a Google Maps handoff for walking directions and a public-transport directions search. Those links are not proof that a route, bus, fare or departure time is available; the user must check the returned route and local conditions.
 - The in-guide interface, recommendations and safety notes support English, Telugu and Hindi. Place names remain as returned by the map provider.
+- The Local Guide question box sends a short question, selected language, group size (solo or two people), and nearby result list to the configured local Ollama model. Its prompt forbids invented fares, timetables, venue status and unsafe shortcuts. If Ollama is unavailable, the nearby map search remains usable.
 - If the map provider fails or has no mapped result, the UI says so instead of inventing a nearby shop or transport service. OpenStreetMap results can be incomplete and should not replace local safety judgement.
 
 The API endpoint is POST /api/local-guide with latitude, longitude and radiusMeters. It validates coordinate bounds, caps search radius and result count, caches map results briefly in process memory, and returns source/provider metadata. Browser location requires user permission and a secure browser context (localhost or HTTPS).
