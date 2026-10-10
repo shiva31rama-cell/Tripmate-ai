@@ -11,7 +11,7 @@ const COPY = {
     radius: "Search radius",
     filters: { all: "All nearby", food: "Food", essentials: "Essentials", culture: "Culture & worship", transport: "Transport", sights: "Places to see", other: "Other" },
     emptyTitle: "Find your first nearby options", emptyBody: "Look for nearby food, public-transport stops, essentials, places of worship and attractions.",
-    results: "nearby mapped places", updated: "checked", live: "LIVE MAP DATA", estimated: "ESTIMATED",
+    results: "nearby mapped places", updated: "checked", live: "LIVE MAP DATA", estimated: "ESTIMATED", unavailableStatus: "MAP SERVICE UNAVAILABLE",
     straightLine: "straight-line distance", about: "about", minutesWalk: "min walk", walking: "Walking directions",
     transit: "Public transport", viewMap: "Open map source",
     noResults: "No mapped places were returned within this radius. That does not prove there are no places here; map coverage may be incomplete.",
