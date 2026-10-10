@@ -42,4 +42,13 @@ export async function searchLocalGuide({ latitude, longitude, radiusMeters = 100
   });
 }
 
+export async function askLocalGuide({ question, language = "en", travellers = 1, places = [], signal }) {
+  return request("/api/local-guide/ask", {
+    method: "POST",
+    signal,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question, language, travellers, places: places.slice(0, 30) }),
+  });
+}
+
 export { API_BASE_URL };
