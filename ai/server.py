@@ -48,6 +48,10 @@ class AIRequest(BaseModel):
     context: dict[str, Any] = Field(default_factory=dict)
 
 
+class PlaceSearchRequest(BaseModel):
+    query: str = Field(min_length=3, max_length=120)
+
+
 def cached(key: str) -> Any | None:
     item = _cache.get(key)
     if not item:
@@ -281,6 +285,35 @@ async def health() -> dict[str, Any]:
 @app.post("/api/plan")
 async def plan(request: AIRequest) -> dict[str, Any]:
     return {"status": "AI_GENERATED", "model": OLLAMA_MODEL, "result": await create_ai_plan(request.context)}
+
+
+
+@app.post("/api/places/search")
+async def search_places(request: PlaceSearchRequest) -> dict[str, Any]:
+    # This is a deliberate user-triggered search, not autocomplete or bulk geocoding.
+    query = request.query.strip()
+    if len(query) < 3:
+        raise HTTPException(status_code=400, detail="Enter at least three characters for a place search.")
+
+    async with httpx.AsyncClient() as client:
+        try:
+            location = await geocode(client, query)
+            places = await nearby_places(client, location)
+        except HTTPException:
+            raise
+        except (httpx.HTTPError, json.JSONDecodeError, KeyError, ValueError, TypeError, IndexError) as exc:
+            raise HTTPException(status_code=503, detail="OpenStreetMap place search is temporarily unavailable. Please retry later.") from exc
+
+    return {
+        "status": "LIVE",
+        "query": query,
+        "location": location,
+        "places": places,
+        "provider": "OpenStreetMap Overpass",
+        "sourceUrl": "https://www.openstreetmap.org/",
+        "checkedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "message": "Mapped results only; missing places do not imply a place does not exist. Opening hours and access rules must be confirmed with the venue.",
+    }
 
 
 @app.post("/api/trip-context")
