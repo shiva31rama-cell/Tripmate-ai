@@ -1,8 +1,64 @@
 import unittest
+from unittest.mock import AsyncMock
 
+import server
 from pydantic import ValidationError
 
 from server import PlaceSearchRequest, TripRequest, _cache, cached, ground_ai_plan, put_cache, safe_http_url
+
+
+class GooglePlacesFallbackTests(unittest.IsolatedAsyncioTestCase):
+    async def test_maps_google_place_fields_and_keeps_api_key_server_side(self):
+        class FakeResponse:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {
+                    "places": [{
+                        "id": "place-id-1",
+                        "displayName": {"text": "Kadapa Fort"},
+                        "location": {"latitude": 14.47, "longitude": 78.82},
+                        "primaryType": "historical_landmark",
+                        "websiteUri": "https://example.org/fort",
+                        "nationalPhoneNumber": "+91 12345 67890",
+                        "googleMapsUri": "https://maps.google.com/?cid=123",
+                        "regularOpeningHours": {"weekdayDescriptions": ["Hours vary"]},
+                    }]
+                }
+
+        client = type("FakeClient", (), {})()
+        client.post = AsyncMock(return_value=FakeResponse())
+        previous_key = server.GOOGLE_PLACES_API_KEY
+        server.GOOGLE_PLACES_API_KEY = "test-server-key"
+        try:
+            places = await server.google_places_search(
+                client,
+                {"latitude": 14.47, "longitude": 78.82},
+                "tourist places near Kadapa",
+            )
+        finally:
+            server.GOOGLE_PLACES_API_KEY = previous_key
+
+        self.assertEqual(places[0]["name"], "Kadapa Fort")
+        self.assertEqual(places[0]["provider"], "Google Places API")
+        self.assertEqual(places[0]["status"], "LIVE")
+        self.assertEqual(places[0]["website"], "https://example.org/fort")
+        self.assertEqual(places[0]["openingHours"], "Hours vary")
+        kwargs = client.post.await_args.kwargs
+        self.assertEqual(kwargs["headers"]["X-Goog-Api-Key"], "test-server-key")
+        self.assertIn("places.displayName", kwargs["headers"]["X-Goog-FieldMask"])
+
+    async def test_google_places_fallback_requires_backend_key(self):
+        previous_key = server.GOOGLE_PLACES_API_KEY
+        server.GOOGLE_PLACES_API_KEY = ""
+        try:
+            with self.assertRaises(server.HTTPException):
+                await server.google_places_search(
+                    object(), {"latitude": 14.47, "longitude": 78.82}, "places near Kadapa"
+                )
+        finally:
+            server.GOOGLE_PLACES_API_KEY = previous_key
 
 
 class TripRequestTests(unittest.TestCase):
