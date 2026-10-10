@@ -322,6 +322,100 @@ async def weather(client: httpx.AsyncClient, destination: dict[str, Any]) -> dic
     return put_cache(key, result)
 
 
+def ground_ai_plan(result: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
+    """Keep venue claims tied to named places actually returned by a provider."""
+    trip = context.get("trip") if isinstance(context.get("trip"), dict) else {}
+    try:
+        requested_days = max(1, min(60, int(trip.get("days", 3))))
+    except (TypeError, ValueError):
+        requested_days = 3
+
+    raw_places = context.get("nearbyPlaces")
+    places = [
+        place for place in raw_places
+        if isinstance(place, dict) and isinstance(place.get("name"), str) and place["name"].strip()
+    ] if isinstance(raw_places, list) else []
+    places_by_name = {place["name"].strip().casefold(): place for place in places}
+    used_names: set[str] = set()
+    raw_days = result.get("days") if isinstance(result.get("days"), list) else []
+    grounded_days = []
+
+    for index in range(requested_days):
+        raw_day = raw_days[index] if index < len(raw_days) and isinstance(raw_days[index], dict) else {}
+        candidates = raw_day.get("activities")
+        if not isinstance(candidates, list):
+            candidates = raw_day.get("items")
+        candidates = candidates if isinstance(candidates, list) else []
+        chosen: list[dict[str, str]] = []
+
+        for candidate in candidates:
+            if isinstance(candidate, str):
+                candidate_text = candidate.strip().casefold()
+            elif isinstance(candidate, dict):
+                candidate_text = " ".join(
+                    str(candidate.get(key, "") or "")
+                    for key in ("title", "name", "place", "place_name", "location")
+                ).strip().casefold()
+            else:
+                continue
+            if not candidate_text:
+                continue
+            match = next(
+                (place for name, place in places_by_name.items()
+                 if name not in used_names and name in candidate_text),
+                None,
+            )
+            if match:
+                name = match["name"].strip()
+                used_names.add(name.casefold())
+                chosen.append({
+                    "title": name,
+                    "description": "Named in live OpenStreetMap data. Confirm opening hours, entry rules and access directly with the venue.",
+                })
+            if len(chosen) >= 3:
+                break
+
+        # When the model fails to select verifiable named places, fill that day
+        # from the provider list rather than inventing venues or opening times.
+        if len(chosen) < 3:
+            for place in places[index * 3:(index + 1) * 3]:
+                name = place["name"].strip()
+                if name.casefold() in used_names:
+                    continue
+                used_names.add(name.casefold())
+                chosen.append({
+                    "title": name,
+                    "description": "Named in live OpenStreetMap data. Confirm opening hours, entry rules and access directly with the venue.",
+                })
+                if len(chosen) >= 3:
+                    break
+
+        grounded_days.append({
+            "title": f"Day {index + 1}",
+            "summary": (
+                "Use these mapped places as discovery options. Timings, ticketing, suitability and local access "
+                "have not been independently verified."
+            ),
+            "activities": chosen,
+        })
+
+    warnings = result.get("dataWarnings") if isinstance(result.get("dataWarnings"), list) else []
+    warnings = [str(item)[:500] for item in warnings if isinstance(item, (str, int, float))]
+    if not places:
+        warnings.append("No named nearby places were returned by the map provider; the AI did not substitute invented venues.")
+    return {
+        "summary": (
+            "Draft suggestions are grounded in named places returned by the live map provider. "
+            "Opening hours, admission, darshan rules and venue access still need direct confirmation."
+        ),
+        "days": grounded_days,
+        "budgetNotes": [
+            "Live booking fares, hotel rates and availability are unavailable until authorized providers are connected."
+        ],
+        "dataWarnings": list(dict.fromkeys(warnings)),
+    }
+
+
 async def create_ai_plan(context: dict[str, Any]) -> dict[str, Any]:
     prompt = {
         "task": "Create a practical multi-day travel itinerary from supplied structured facts.",
@@ -360,10 +454,7 @@ async def create_ai_plan(context: dict[str, Any]) -> dict[str, Any]:
             result["days"] = []
         if not isinstance(result["dataWarnings"], list):
             result["dataWarnings"] = []
-        result["budgetNotes"] = [
-            "Live booking fares and availability are unavailable until an authorized provider is connected."
-        ]
-        return result
+        return ground_ai_plan(result, context)
     except (httpx.HTTPError, json.JSONDecodeError, KeyError, ValueError) as exc:
         raise HTTPException(status_code=503, detail="Local AI planner unavailable or returned invalid JSON.") from exc
 
