@@ -237,3 +237,39 @@ Apply Supabase migrations in order: `supabase/migrations/001_tripmate_foundation
 
 ### Public provider limits
 The public Nominatim endpoint is rate-limited. The backend serializes uncached geocoding requests within its single API worker and caches results. If you scale the API to multiple workers/replicas, use a shared rate limiter and cache or configure a hosted Nominatim-compatible provider before increasing traffic. Do not add autocomplete or bulk geocoding against the public endpoint.
+
+
+## Connected account sync and live place discovery
+
+The frontend now has real Supabase Auth flows and account-scoped trip persistence when project settings are supplied. Without those settings, the app stays in guest mode; it never pretends a local form submission created an account.
+
+### Enable authentication and trip sync
+
+1. Create a Supabase project and copy its **Project URL** and **publishable/anon key**.
+2. Copy `.env.example` to `.env` and fill these frontend values:
+
+   ```dotenv
+   VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+   VITE_SUPABASE_ANON_KEY=YOUR_PUBLISHABLE_OR_ANON_KEY
+   VITE_API_BASE_URL=http://localhost:8000
+   ```
+
+   Never put the Supabase `service_role` key in a `VITE_*` variable or browser code.
+3. In the Supabase SQL Editor, run migrations in order:
+   `001_tripmate_foundation.sql`, `002_tripmate_rls_policies.sql`, then `003_auth_and_trip_sync.sql`.
+4. In Supabase **Authentication → URL Configuration**, set your local app as the Site URL (usually `http://localhost:5173`) and add your deployed/Codespaces app URL to the redirect allow-list.
+5. Email/password auth works through Supabase Auth. To use Google, enable the Google provider in Supabase **Authentication → Providers** and configure its OAuth credentials/redirects there.
+6. Restart the Vite server after changing `.env`. Sign in and create a trip; the app saves trip fields, itinerary JSON and provider context to the authenticated user's row. RLS restricts rows to their owner.
+
+If migrations have not been applied, auth can still work but trip sync will show a clear database error. Guest trips stay in local browser storage and are not uploaded until cloud persistence is explicitly used by a signed-in session.
+
+### Live place search and booking handoffs
+
+- Explore now provides a button-triggered OpenStreetMap search. It verifies a location and requests nearby mapped attractions and places of worship. It is deliberately not autocomplete, to respect public Nominatim's usage policy.
+- Plans provide external handoffs to IRCTC's official train portal, Google Flights/Hotels search, redBus and Google Maps local rental search. These handoffs are **not** integrated fare/availability feeds, and TripMate does not claim prices, inventory, opening hours or a booking were verified.
+- The map provider may omit places or stale tags. Check opening times, darshan/entry rules, local transport and official venue information before departure.
+- Commercial fares, seat inventory, accommodation inventory, local rental availability, cancellations and booking still require authorized provider APIs/accounts; those remain unavailable inside TripMate until such a provider is configured.
+
+### Current verified boundary
+
+The frontend and backend support live geocoding, OSRM driving distance/duration, mapped nearby places and current weather when the public sources are reachable. Local model itinerary generation requires Ollama and the configured model. Saved trip synchronization requires a configured Supabase project and all three migrations. The GitHub Actions workflow tests the application and backend, but does not provision third-party accounts or validate live provider uptime.
