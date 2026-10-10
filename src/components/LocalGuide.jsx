@@ -451,7 +451,7 @@ export default function LocalGuide({ language = "en" }) {
                     <div className="local-guide-walking-route" aria-live="polite">
                       <strong>{t.routeLength}: {formatDistance(walkingRoute.distanceMeters)}</strong>
                       <p>{t.about} {walkingRoute.durationMinutes} {t.minutesWalk}</p>
-                      <small>{walkingRoute.provider} · {t.routeAdvice}</small>
+                      <small><a href={walkingRoute.sourceUrl || "https://github.com/valhalla/valhalla"} target="_blank" rel="noreferrer noopener">{walkingRoute.provider}</a> · {t.routeAdvice}</small>
                     </div>
                   ) : walkingRoute?.status === "UNAVAILABLE" ? (
                     <p className="local-guide-route-error" role="status">{t.routeUnavailable}</p>
