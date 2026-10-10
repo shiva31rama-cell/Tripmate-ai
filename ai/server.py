@@ -367,7 +367,7 @@ async def nearby_local_guide(
         f'nwr(around:{radius_m},{latitude},{longitude})[shop~"convenience|supermarket|bakery|general"];',
         f"nwr(around:{radius_m},{latitude},{longitude})[leisure=park];",
     ]
-    query = "[out:json][timeout:20];\\n(\\n" + "\\n".join(selectors) + "\\n);\\nout center tags;"
+    query = "[out:json][timeout:20];\n(\n" + "\n".join(selectors) + "\n);\nout center tags;"
     response = await client.post(
         OVERPASS_URL,
         data={"data": query},
