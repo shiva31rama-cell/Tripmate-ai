@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os
 import time
 from typing import Any, Literal
@@ -10,6 +11,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+logger = logging.getLogger("tripmate.api")
 app = FastAPI(title="TripMate Open Travel Service", version="0.2.0")
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
@@ -815,7 +817,8 @@ async def create_ai_plan(context: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(result["dataWarnings"], list):
             result["dataWarnings"] = []
         return ground_ai_plan(result, context)
-    except (httpx.HTTPError, json.JSONDecodeError, KeyError, ValueError) as exc:
+    except (httpx.HTTPError, json.JSONDecodeError, KeyError, ValueError, TypeError, AttributeError, IndexError) as exc:
+        logger.warning("AI planner unavailable or returned invalid data: %s", type(exc).__name__)
         raise HTTPException(status_code=503, detail="Local AI planner unavailable or returned invalid JSON.") from exc
 
 
@@ -1035,7 +1038,9 @@ async def trip_context(request: TripRequest) -> dict[str, Any]:
         ai_result = None
         try:
             ai_result = await create_ai_plan(context)
-        except HTTPException:
+        except Exception as exc:
+            # AI output is optional: never turn a verified trip context into an HTTP 500.
+            logger.warning("AI itinerary generation failed; returning verified context without AI: %s", type(exc).__name__)
             context["providerWarnings"].append("Local AI is unavailable; source-backed context is still available.")
 
     return {
