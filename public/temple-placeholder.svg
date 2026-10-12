@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" role="img" aria-labelledby="title desc">
+  <title id="title">Destination image unavailable</title>
+  <desc id="desc">A calm illustrated heritage building under a sunrise.</desc>
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#dcebe1"/>
+      <stop offset="1" stop-color="#f8f3e7"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="675" fill="url(#sky)"/>
+  <circle cx="930" cy="145" r="62" fill="#e7c98b" opacity=".85"/>
+  <path d="M0 520 Q260 445 480 520 T900 500 T1200 515 V675 H0Z" fill="#c5d7c5"/>
+  <path d="M270 510 V340 H930 V510Z" fill="#b98257"/>
+  <path d="M235 340 L600 220 L965 340Z" fill="#986947"/>
+  <path d="M390 340 V290 Q600 205 810 290 V340Z" fill="#d4a778"/>
+  <path d="M330 380 H870 V410 H330Z M330 450 H870 V480 H330Z" fill="#e4c39a"/>
+  <g fill="#f5e4c9">
+    <path d="M390 510 V420 Q430 370 470 420 V510Z"/>
+    <path d="M550 510 V420 Q600 360 650 420 V510Z"/>
+    <path d="M730 510 V420 Q770 370 810 420 V510Z"/>
+  </g>
+  <text x="600" y="600" text-anchor="middle" font-family="Arial, sans-serif" font-size="27" fill="#476653">Destination photo unavailable</text>
+</svg>
