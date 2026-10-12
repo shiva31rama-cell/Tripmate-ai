@@ -1,13 +1,36 @@
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
 
 async function request(path, options = {}) {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers: { Accept: "application/json", ...(options.headers || {}) },
-  });
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      headers: { Accept: "application/json", ...(options.headers || {}) },
+    });
+  } catch (error) {
+    if (error?.name === "AbortError") throw error;
+    if (error instanceof TypeError) {
+      throw new Error(
+        "TripMate API is unreachable. Start the FastAPI service on port 8000, check the /health endpoint, and confirm the Vite /api proxy is running."
+      );
+    }
+    throw error;
+  }
+
   let payload = null;
   try { payload = await response.json(); } catch {}
-  if (!response.ok) throw new Error(payload?.detail || `TripMate service error: ${response.status}`);
+
+  if (!response.ok) {
+    if (response.status >= 500) {
+      const detail = typeof payload?.detail === "string" ? payload.detail : "";
+      throw new Error(
+        detail
+          ? `TripMate backend error (${response.status}): ${detail}`
+          : `TripMate backend returned HTTP ${response.status}. Check the FastAPI terminal logs for the traceback; /health only confirms the service process is responding.`
+      );
+    }
+    throw new Error(payload?.detail || `TripMate request failed (HTTP ${response.status}).`);
+  }
   return payload;
 }
 
