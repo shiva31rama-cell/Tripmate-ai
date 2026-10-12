@@ -630,7 +630,7 @@ function PlaceCard({ place }) {
   return (
     <article className="place-card">
       <div className="image-wrap">
-        <img src={place.image} alt={place.name} loading="lazy" />
+        <img src={place.image} alt={place.name} loading="lazy" onError={(event) => { if (event.currentTarget.dataset.fallbackApplied) return; event.currentTarget.dataset.fallbackApplied = "true"; event.currentTarget.src = "/temple-placeholder.svg"; }} />
         <StatusBadge status={place.status} />
       </div>
       <div className="place-content">
